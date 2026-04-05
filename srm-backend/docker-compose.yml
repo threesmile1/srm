@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: srm-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: srm
+      MYSQL_USER: srm
+      MYSQL_PASSWORD: srm
+    ports:
+      - "3306:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - srm-mysql-data:/var/lib/mysql
+
+volumes:
+  srm-mysql-data:

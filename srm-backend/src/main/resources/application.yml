@@ -1,0 +1,39 @@
+spring:
+  profiles:
+    active: dev
+  application:
+    name: srm-backend
+  datasource:
+    url: jdbc:mysql://localhost:3306/srm?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
+    username: srm
+    password: srm
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# 收货超收比例、U9 导入单据类型编码（与《导入映射说明书》冻结值对齐）
+srm:
+  over-receive-ratio: 0.05
+  export-po-type-code: PO01
+  export-gr-type-code: GR01
+
+logging:
+  level:
+    org.hibernate.SQL: debug

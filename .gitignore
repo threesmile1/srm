@@ -1,10 +1,22 @@
-# 子工程为独立 Git 仓库，由各自 remote 管理；本仓库仅聚合文档与工作区说明
-/srm-backend/
-/srm-admin-web/
-/srm-portal-web/
+# Monorepo：后端 / 管理端 / 门户 同仓
 
+# 前端
+**/node_modules/
+**/dist/
+**/dist-ssr/
+*.local
+
+# 后端
+srm-backend/target/
+srm-backend/.idea/
+srm-backend/*.iml
+
+# 通用
 .DS_Store
 Thumbs.db
 *.log
-
 .vscode/
+!.vscode/extensions.json
+
+.env
+.env.local

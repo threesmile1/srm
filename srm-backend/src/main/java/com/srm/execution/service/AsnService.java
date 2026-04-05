@@ -1,0 +1,134 @@
+package com.srm.execution.service;
+
+import com.srm.execution.domain.AsnLine;
+import com.srm.execution.domain.AsnNotice;
+import com.srm.execution.domain.AsnStatus;
+import com.srm.execution.repo.AsnLineRepository;
+import com.srm.execution.repo.AsnNoticeRepository;
+import com.srm.master.domain.Supplier;
+import com.srm.master.service.MasterDataService;
+import com.srm.po.domain.PoStatus;
+import com.srm.po.domain.PurchaseOrder;
+import com.srm.po.domain.PurchaseOrderLine;
+import com.srm.po.repo.PurchaseOrderRepository;
+import com.srm.web.error.BadRequestException;
+import com.srm.web.error.NotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class AsnService {
+
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final AsnNoticeRepository asnNoticeRepository;
+    private final AsnLineRepository asnLineRepository;
+    private final AsnNumberAllocator asnNumberAllocator;
+    private final MasterDataService masterDataService;
+
+    @Transactional(readOnly = true)
+    public List<AsnNotice> listByPurchaseOrder(Long poId) {
+        PurchaseOrder po = purchaseOrderRepository.findById(poId)
+                .orElseThrow(() -> new NotFoundException("采购订单不存在: " + poId));
+        return asnNoticeRepository.findByPurchaseOrderOrderByIdDesc(po);
+    }
+
+    @Transactional(readOnly = true)
+    public AsnNotice requireWithLines(Long asnId) {
+        return asnNoticeRepository.findWithLinesById(asnId)
+                .orElseThrow(() -> new NotFoundException("ASN 不存在: " + asnId));
+    }
+
+    @Transactional(readOnly = true)
+    public AsnNotice requireWithLinesForSupplier(long supplierId, long asnId) {
+        AsnNotice n = requireWithLines(asnId);
+        if (!n.getSupplier().getId().equals(supplierId)) {
+            throw new BadRequestException("无权查看该 ASN");
+        }
+        return n;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AsnNotice> listForSupplier(Long supplierId) {
+        Supplier supplier = masterDataService.requireSupplier(supplierId);
+        return asnNoticeRepository.findBySupplierOrderByIdDesc(supplier);
+    }
+
+    /**
+     * 门户创建 ASN（已提交）。校验：订单已发布、供应商一致、发货量不超过可发数量。
+     */
+    @Transactional
+    public AsnNotice createFromSupplier(
+            long supplierId,
+            long purchaseOrderId,
+            LocalDate shipDate,
+            LocalDate etaDate,
+            String carrier,
+            String trackingNo,
+            String remark,
+            List<AsnLineInput> lines
+    ) {
+        PurchaseOrder po = purchaseOrderRepository.findWithDetailsById(purchaseOrderId)
+                .orElseThrow(() -> new NotFoundException("采购订单不存在: " + purchaseOrderId));
+        if (!po.getSupplier().getId().equals(supplierId)) {
+            throw new BadRequestException("无权对该订单发货通知");
+        }
+        if (po.getStatus() != PoStatus.RELEASED) {
+            throw new BadRequestException("仅已发布订单可创建 ASN，当前: " + po.getStatus());
+        }
+        if (lines == null || lines.isEmpty()) {
+            throw new BadRequestException("ASN 至少一行");
+        }
+
+        Map<Long, PurchaseOrderLine> polMap = po.getLines().stream()
+                .collect(Collectors.toMap(PurchaseOrderLine::getId, Function.identity()));
+
+        String asnNo = asnNumberAllocator.nextAsnNo(po.getProcurementOrg());
+        AsnNotice notice = new AsnNotice();
+        notice.setAsnNo(asnNo);
+        notice.setPurchaseOrder(po);
+        notice.setSupplier(po.getSupplier());
+        notice.setProcurementOrg(po.getProcurementOrg());
+        notice.setShipDate(shipDate);
+        notice.setEtaDate(etaDate);
+        notice.setCarrier(carrier);
+        notice.setTrackingNo(trackingNo);
+        notice.setRemark(remark);
+        notice.setStatus(AsnStatus.SUBMITTED);
+
+        int n = 1;
+        for (AsnLineInput in : lines) {
+            PurchaseOrderLine pol = polMap.get(in.purchaseOrderLineId());
+            if (pol == null) {
+                throw new BadRequestException("订单行不属于该订单: " + in.purchaseOrderLineId());
+            }
+            if (in.shipQty().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BadRequestException("发货数量须大于 0");
+            }
+            BigDecimal outstanding = pol.getQty().subtract(pol.getReceivedQty());
+            BigDecimal alreadyShipped = asnLineRepository.sumShipQtySubmittedForPolLine(pol.getId());
+            if (in.shipQty().add(alreadyShipped).compareTo(outstanding) > 0) {
+                throw new BadRequestException(
+                        "行 " + pol.getLineNo() + " 可发数量不足（订购-已收-已通知): " + outstanding.subtract(alreadyShipped));
+            }
+            AsnLine al = new AsnLine();
+            al.setAsnNotice(notice);
+            al.setPurchaseOrderLine(pol);
+            al.setLineNo(n++);
+            al.setShipQty(in.shipQty());
+            notice.getLines().add(al);
+        }
+
+        return asnNoticeRepository.save(notice);
+    }
+
+    public record AsnLineInput(long purchaseOrderLineId, BigDecimal shipQty) {}
+}
