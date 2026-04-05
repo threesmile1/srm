@@ -1,0 +1,8 @@
+# 子工程为独立 Git 仓库，由各自 remote 管理；本仓库仅聚合文档与工作区说明
+/srm-backend/
+/srm-admin-web/
+/srm-portal-web/
+
+.DS_Store
+Thumbs.db
+*.log
