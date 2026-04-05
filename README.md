@@ -6,9 +6,9 @@
 |------|------|
 | [docs/SRM建设方案.md](./docs/SRM建设方案.md) | 业务与架构方案 |
 | [docs/开发计划.md](./docs/开发计划.md) | 阶段与 Sprint 参考 |
-| [srm-backend](./srm-backend/) | Java / Spring Boot 3 后端（待初始化） |
-| [srm-admin-web](./srm-admin-web/) | Vue 3 + TS 管理端（待初始化） |
-| [srm-portal-web](./srm-portal-web/) | Vue 3 + TS 供应商门户（待初始化） |
+| [srm-backend](./srm-backend/) | Java / Spring Boot 3 后端（**一期 A1 API 已脚手架**） |
+| [srm-admin-web](./srm-admin-web/) | Vue 3 + TS 管理端（**5173**，联调页） |
+| [srm-portal-web](./srm-portal-web/) | Vue 3 + TS 供应商门户（**5174**，联调页） |
 
 联调时：后端提供 OpenAPI；两前端分别配置 `VITE_API_BASE_URL`（或等价变量）指向同一后端地址。
 
