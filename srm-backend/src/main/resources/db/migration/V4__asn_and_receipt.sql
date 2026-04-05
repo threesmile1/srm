@@ -78,7 +78,7 @@ CREATE TABLE goods_receipt_line (
 CREATE TABLE gr_number_seq (
     procurement_org_id BIGINT NOT NULL,
     year_val INT NOT NULL,
-    last_value BIGINT NOT NULL DEFAULT 0,
+    seq_value BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY (procurement_org_id, year_val),
     CONSTRAINT fk_grns_org FOREIGN KEY (procurement_org_id) REFERENCES org_unit (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -86,7 +86,7 @@ CREATE TABLE gr_number_seq (
 CREATE TABLE asn_number_seq (
     procurement_org_id BIGINT NOT NULL,
     year_val INT NOT NULL,
-    last_value BIGINT NOT NULL DEFAULT 0,
+    seq_value BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY (procurement_org_id, year_val),
     CONSTRAINT fk_asnns_org FOREIGN KEY (procurement_org_id) REFERENCES org_unit (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

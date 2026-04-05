@@ -27,8 +27,8 @@ git push origin main
 
 ## 本地启动（摘要）
 
-- MySQL：`cd srm-backend` → `docker compose up -d`
-- 后端：`mvn spring-boot:run`（JDK 17 + Maven）
+- **MySQL**：本机已装 MySQL 8 时，在 `srm-backend` 执行 `mysql -u root -p < scripts/init-local-mysql.sql` 初始化库与用户；或用 `docker compose up -d` 起容器库。
+- 后端：`cd srm-backend` → `mvn spring-boot:run`（JDK 17 + Maven）
 - 管理端 / 门户：各目录 `npm install` → `npm run dev`
 
 详见各子目录 `README.md`。

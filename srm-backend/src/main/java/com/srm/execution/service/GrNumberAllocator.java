@@ -24,12 +24,12 @@ public class GrNumberAllocator {
         if (grNumberSeqRepository.findById(id).isEmpty()) {
             GrNumberSeq init = new GrNumberSeq();
             init.setId(id);
-            init.setLastValue(0);
+            init.setSeqValue(0);
             grNumberSeqRepository.saveAndFlush(init);
         }
         GrNumberSeq seq = grNumberSeqRepository.findForUpdate(oid, year).orElseThrow();
-        long next = seq.getLastValue() + 1;
-        seq.setLastValue(next);
+        long next = seq.getSeqValue() + 1;
+        seq.setSeqValue(next);
         grNumberSeqRepository.save(seq);
         return procurementOrg.getCode() + "-GR" + year + "-" + String.format("%05d", next);
     }

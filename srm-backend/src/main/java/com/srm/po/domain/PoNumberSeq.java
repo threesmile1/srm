@@ -16,6 +16,6 @@ public class PoNumberSeq {
     @EmbeddedId
     private PoNumberSeqId id;
 
-    @Column(name = "last_value", nullable = false)
-    private long lastValue = 0;
+    @Column(name = "seq_value", nullable = false)
+    private long seqValue = 0;
 }

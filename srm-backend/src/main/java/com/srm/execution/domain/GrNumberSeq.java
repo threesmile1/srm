@@ -16,6 +16,6 @@ public class GrNumberSeq {
     @EmbeddedId
     private GrNumberSeqId id;
 
-    @Column(name = "last_value", nullable = false)
-    private long lastValue;
+    @Column(name = "seq_value", nullable = false)
+    private long seqValue;
 }

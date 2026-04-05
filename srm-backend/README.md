@@ -5,7 +5,7 @@ SRM **后端**：Java **17**、**Spring Boot 3.4**、**MySQL 8**、**Flyway**、
 ## 环境要求
 
 - **JDK 17+**、**Maven 3.9+**
-- **Docker**（推荐，用于启动 MySQL）
+- **MySQL 8**（**本机安装** 或 用下方 Docker 任选其一）
 
 ### Windows 快速安装（示例）
 
@@ -24,7 +24,27 @@ cd srm-backend
 mvn test
 ```
 
-## 启动 MySQL
+## 本机已安装 MySQL（无 Docker）
+
+1. 确保 MySQL 服务已启动，且监听 **`localhost:3306`**（或与 `application.yml` 中 URL 一致）。
+2. 使用 **`root`**（或其它管理员）执行初始化脚本，创建库与用户（与默认配置一致）：
+
+```powershell
+cd srm-backend
+mysql -u root -p < scripts/init-local-mysql.sql
+```
+
+3. 启动后端（**不要**加 `h2dev` 配置，使用默认 **`dev`** 即可走 **Flyway** + 本机 MySQL）：
+
+```powershell
+mvn spring-boot:run
+```
+
+若账号/密码与默认不同，可复制 `src/main/resources/application.yml` 为 **`application-local.yml`**（勿提交密钥），仅覆盖 `spring.datasource.*`，并启动：
+
+`mvn spring-boot:run -Dspring-boot.run.profiles=dev,local`
+
+## 用 Docker 启动 MySQL（可选）
 
 在 `srm-backend` 目录：
 
@@ -52,7 +72,42 @@ mvn spring-boot:run
 
 > 若自 V1 升级上来且库里 **已有账套无供应商**，需清空 `supplier` 表或整库重建，否则不会触发第二阶段种子。
 
+无本机 MySQL、仅想快速试跑时，可使用内存 H2（**不跑 Flyway**，表由 Hibernate 生成）：`mvn spring-boot:run -Dspring-boot.run.profiles=dev,h2dev`（见 `application-h2dev.yml`）。
+
 生产使用 **`spring.profiles.active=prod`**，关闭 dev 种子并配置数据源与安全策略。
+
+### 故障排除：`No plugin found for prefix 'spring-boot'`
+
+1. 必须在 **`srm-backend`** 目录执行（该目录下有 `pom.xml`）。  
+2. 强制拉取依赖并重试：`mvn -U clean spring-boot:run`  
+3. 仍报错时用**完整插件坐标**（不依赖前缀解析）：
+
+```powershell
+mvn org.springframework.boot:spring-boot-maven-plugin:3.4.2:run
+```
+
+4. 使用 **Administrator** 等账户时，本地仓库在 `C:\Users\Administrator\.m2`，需能访问外网下载 `spring-boot-starter-parent`；若公司代理，请配置 `%USERPROFILE%\.m2\settings.xml`。
+
+### 故障排除：Flyway `V3__purchase_order.sql`
+
+- **1064 / `last_value` / `year`**：序列表使用 **`year_val`**（勿用保留字 `year`）；当前序号列使用 **`seq_value`**（勿用 `last_value`，与 MySQL 8 窗口函数 **LAST_VALUE** 冲突）。  
+- **1060 / `Duplicate column 'supplier_id'`**：说明 **`supplier_id` 已存在**，脚本又执行了一次。当前 **V3 已改为幂等**（列、外键、表已存在则跳过）；请 **拉取最新 `V3__purchase_order.sql`** 后重启。若 Flyway 里仍有 **失败的 V3 记录**，可先：
+
+```sql
+DELETE FROM flyway_schema_history WHERE version = '3' AND success = 0;
+```
+
+再 `mvn spring-boot:run`。若 V3 已成功入库但改过脚本导致 **checksum 不一致**，需按 Flyway 文档执行 `repair` 或清空库重来。
+
+### 故障排除：Flyway **Validate failed: migration checksum mismatch**
+
+说明：**库里已记录的脚本校验和** 与 **当前 `db/migration` 文件内容** 不一致（常见于多次修改 V3/V4 等）。
+
+- **开发环境（默认 `dev`）**：已启用 **`spring.flyway.repair-on-migrate: true`**（见 `application-dev.yml`），一般 **直接重启** `mvn spring-boot:run` 即可自动对齐校验和。  
+- **手动 repair**（不配自动修复时）：在 `srm-backend` 配置好数据源后执行  
+  `mvn -Dflyway.configFiles=... flyway:repair`  
+  或直接在库里按 [Flyway 文档](https://documentation.red-gate.com/flyway) 调整 `flyway_schema_history`。  
+- **仅本地开发库**：也可 `DROP DATABASE srm` 后按 `scripts/init-local-mysql.sql` 重建，再启动（最干净）。
 
 ## 已实现模块
 

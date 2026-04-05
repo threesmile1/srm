@@ -1,0 +1,16 @@
+# 无本机 MySQL / Docker 时使用内存 H2（与 dev 种子数据联用）
+# 启动：mvn spring-boot:run -Dspring-boot.run.profiles=dev,h2dev
+spring:
+  datasource:
+    url: jdbc:h2:mem:srm;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  flyway:
+    enabled: false

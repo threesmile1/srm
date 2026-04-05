@@ -27,13 +27,13 @@ public class PoNumberService {
         if (poNumberSeqRepository.findById(id).isEmpty()) {
             PoNumberSeq init = new PoNumberSeq();
             init.setId(id);
-            init.setLastValue(0);
+            init.setSeqValue(0);
             poNumberSeqRepository.saveAndFlush(init);
         }
         PoNumberSeq seq = poNumberSeqRepository.findForUpdate(oid, year)
                 .orElseThrow(() -> new IllegalStateException("po_number_seq missing after init"));
-        long next = seq.getLastValue() + 1;
-        seq.setLastValue(next);
+        long next = seq.getSeqValue() + 1;
+        seq.setSeqValue(next);
         poNumberSeqRepository.save(seq);
         return procurementOrg.getCode() + "-PO" + year + "-" + String.format("%05d", next);
     }

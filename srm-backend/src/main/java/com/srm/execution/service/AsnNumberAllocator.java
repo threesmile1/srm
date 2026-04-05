@@ -24,12 +24,12 @@ public class AsnNumberAllocator {
         if (asnNumberSeqRepository.findById(id).isEmpty()) {
             AsnNumberSeq init = new AsnNumberSeq();
             init.setId(id);
-            init.setLastValue(0);
+            init.setSeqValue(0);
             asnNumberSeqRepository.saveAndFlush(init);
         }
         AsnNumberSeq seq = asnNumberSeqRepository.findForUpdate(oid, year).orElseThrow();
-        long next = seq.getLastValue() + 1;
-        seq.setLastValue(next);
+        long next = seq.getSeqValue() + 1;
+        seq.setSeqValue(next);
         asnNumberSeqRepository.save(seq);
         return procurementOrg.getCode() + "-ASN" + year + "-" + String.format("%05d", next);
     }
