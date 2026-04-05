@@ -15,7 +15,8 @@ onMounted(async () => {
     <h2 class="title">我的发货通知</h2>
     <p class="hint">
       <router-link to="/asn/new">新建 ASN</router-link>
-      · 联调使用 <code>VITE_DEV_SUPPLIER_ID</code>
+      <span class="sep">·</span>
+      数据范围与登录时供应商编号一致
     </p>
     <el-table :data="rows" stripe style="margin-top: 16px">
       <el-table-column prop="asnNo" label="ASN 单号" width="160" />
@@ -38,9 +39,13 @@ onMounted(async () => {
 
 <style scoped>
 .page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.sep {
+  margin: 0 6px;
+  color: #d1d5db;
 }
 .title {
   font-size: 18px;

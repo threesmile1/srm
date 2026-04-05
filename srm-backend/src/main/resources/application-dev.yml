@@ -1,6 +1,6 @@
-# 随 spring.profiles.active=dev 自动合并（见 application.yml）
+# 随 spring.profiles.active=dev 自动合并（见 application.yml）。
+# Flyway 开发期 checksum：由 DevFlywayRepairConfig（先 repair 再 migrate）处理；
+# 勿仅依赖 spring.flyway.repair-on-migrate（部分版本在 validate 前不会先 repair）。
 spring:
-  flyway:
-    # 开发期若改动了已执行过的 migration 文件，启动前自动 repair 校验和，避免 Flyway Validate 失败
-    # 上线环境请使用 prod 等 profile，且勿对已发布库随意改历史脚本
-    repair-on-migrate: true
+  application:
+    name: srm-backend

@@ -12,6 +12,7 @@ import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.repo.PurchaseOrderRepository;
 import com.srm.web.error.BadRequestException;
+import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -51,7 +52,7 @@ public class AsnService {
     public AsnNotice requireWithLinesForSupplier(long supplierId, long asnId) {
         AsnNotice n = requireWithLines(asnId);
         if (!n.getSupplier().getId().equals(supplierId)) {
-            throw new BadRequestException("无权查看该 ASN");
+            throw new NotFoundException("ASN 不存在");
         }
         return n;
     }
@@ -79,7 +80,7 @@ public class AsnService {
         PurchaseOrder po = purchaseOrderRepository.findWithDetailsById(purchaseOrderId)
                 .orElseThrow(() -> new NotFoundException("采购订单不存在: " + purchaseOrderId));
         if (!po.getSupplier().getId().equals(supplierId)) {
-            throw new BadRequestException("无权对该订单发货通知");
+            throw new ForbiddenException("无权对该订单创建发货通知");
         }
         if (po.getStatus() != PoStatus.RELEASED) {
             throw new BadRequestException("仅已发布订单可创建 ASN，当前: " + po.getStatus());

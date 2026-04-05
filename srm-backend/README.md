@@ -103,7 +103,7 @@ DELETE FROM flyway_schema_history WHERE version = '3' AND success = 0;
 
 说明：**库里已记录的脚本校验和** 与 **当前 `db/migration` 文件内容** 不一致（常见于多次修改 V3/V4 等）。
 
-- **开发环境（默认 `dev`）**：已启用 **`spring.flyway.repair-on-migrate: true`**（见 `application-dev.yml`），一般 **直接重启** `mvn spring-boot:run` 即可自动对齐校验和。  
+- **开发环境（默认 `dev`）**：**`DevFlywayRepairConfig`**（`@Profile("dev")`）在 Flyway 迁移前执行 **`repair()` 再 `migrate()`**，可自动对齐 `flyway_schema_history` 中的 checksum；一般 **直接重启** `mvn spring-boot:run` 即可。  
 - **手动 repair**（不配自动修复时）：在 `srm-backend` 配置好数据源后执行  
   `mvn -Dflyway.configFiles=... flyway:repair`  
   或直接在库里按 [Flyway 文档](https://documentation.red-gate.com/flyway) 调整 `flyway_schema_history`。  

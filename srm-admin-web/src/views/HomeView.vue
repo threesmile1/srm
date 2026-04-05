@@ -22,10 +22,13 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <el-page-header content="一期 · 基础平台联调" />
+  <div class="page srm-page srm-page--fluid">
+    <div class="page-head">
+      <h2 class="page-title">工作台</h2>
+      <p class="page-desc">基础平台连通性与账套一览</p>
+    </div>
     <el-alert v-if="error" :title="error" type="error" show-icon style="margin-top: 16px" />
-    <p class="nav-hint">请使用左侧菜单进入 <strong>供应商 / 物料 / 采购订单</strong>。</p>
+    <p class="nav-hint">请使用左侧菜单进入 <strong>主数据</strong>与 <strong>采购执行</strong>模块。</p>
     <el-row :gutter="16" style="margin-top: 16px">
       <el-col :span="12">
         <el-card shadow="hover">
@@ -51,9 +54,23 @@ onMounted(load)
 
 <style scoped>
 .page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
+  padding: 0;
+}
+.page-head {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+.page-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #6b7280;
 }
 .muted {
   color: var(--el-text-color-secondary);
@@ -61,5 +78,6 @@ onMounted(load)
 .nav-hint {
   margin-top: 12px;
   color: var(--el-text-color-regular);
+  font-size: 13px;
 }
 </style>

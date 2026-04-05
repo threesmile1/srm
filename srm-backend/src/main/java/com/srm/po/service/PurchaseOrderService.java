@@ -15,6 +15,7 @@ import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.repo.PurchaseOrderLineRepository;
 import com.srm.po.repo.PurchaseOrderRepository;
 import com.srm.web.error.BadRequestException;
+import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -160,7 +161,7 @@ public class PurchaseOrderService {
                 .orElseThrow(() -> new NotFoundException("订单行不存在: " + lineId));
         PurchaseOrder po = line.getPurchaseOrder();
         if (!po.getSupplier().getId().equals(supplierId)) {
-            throw new BadRequestException("无权确认该行");
+            throw new ForbiddenException("无权确认该行");
         }
         if (po.getStatus() != PoStatus.RELEASED) {
             throw new BadRequestException("仅已发布订单可确认行，当前状态: " + po.getStatus());

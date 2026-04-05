@@ -1,0 +1,57 @@
+/* 百得胜家居 · 采购协同：品牌主色 + 浅灰内容区 */
+
+:root {
+  --srm-primary: #c8102e;
+  --srm-primary-dark: #9e0c24;
+  --srm-sidebar-bg: #0c1421;
+  --srm-sidebar-active: rgba(22, 119, 255, 0.18);
+  --srm-header-height: 48px;
+  --srm-aside-width: 220px;
+  --srm-content-bg: #f0f2f5;
+  --srm-font: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+}
+
+html {
+  --el-color-primary: #c8102e;
+  --el-color-primary-light-3: #d64a5e;
+  --el-color-primary-light-5: #e07a8a;
+  --el-color-primary-light-7: #ebaab5;
+  --el-color-primary-light-8: #f0c2cb;
+  --el-color-primary-light-9: #fce8ec;
+  --el-color-primary-dark-2: #a00d25;
+  --el-border-radius-base: 6px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--srm-font);
+  font-size: 14px;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  text-align: left;
+  border: none;
+}
+
+/* 业务页统一内边距（可选） */
+.srm-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.srm-page--fluid {
+  max-width: none;
+}

@@ -139,9 +139,9 @@ async function submit() {
 
 <style scoped>
 .page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 .head {
   display: flex;

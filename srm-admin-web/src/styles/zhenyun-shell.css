@@ -1,0 +1,36 @@
+/* 登录后壳层：甄云系 SRM（深色侧栏 + 浅顶栏 + 灰底内容区），与业务页 Element 组件并存 */
+
+:root {
+  --zy-sidebar: #0c1421;
+  --zy-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --zy-menu-active-bg: rgba(22, 119, 255, 0.18);
+  --zy-menu-accent: #1677ff;
+  --zy-header-border: #e8e8e8;
+  --zy-card-border: #f0f0f0;
+  --zy-text-muted: rgba(255, 255, 255, 0.55);
+}
+
+/* 侧栏折叠时子菜单弹出层（甄云深色） */
+.zy-menu-popper.el-popper.is-pure {
+  background: #1a2332 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.zy-menu-popper .el-menu {
+  background: transparent !important;
+  border: none !important;
+}
+
+.zy-menu-popper .el-menu-item,
+.zy-menu-popper .el-sub-menu__title {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+.zy-menu-popper .el-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.zy-menu-popper .el-menu-item.is-active {
+  background: rgba(22, 119, 255, 0.22) !important;
+  color: #fff !important;
+}

@@ -1,0 +1,39 @@
+:root {
+  --srm-primary: #c8102e;
+  --srm-content-bg: #f0f2f5;
+  --srm-header-height: 56px;
+  --srm-font: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', system-ui, sans-serif;
+}
+
+html {
+  --el-color-primary: #c8102e;
+  --el-color-primary-light-3: #d64a5e;
+  --el-color-primary-light-5: #e07a8a;
+  --el-color-primary-light-9: #fce8ec;
+  --el-color-primary-dark-2: #a00d25;
+  --el-border-radius-base: 6px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--srm-font);
+  font-size: 14px;
+  color: #1f2937;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  text-align: left;
+  border: none;
+}

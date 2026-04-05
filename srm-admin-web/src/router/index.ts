@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import MainLayout from '../layouts/MainLayout.vue'
+import LoginView from '../views/LoginView.vue'
 import HomeView from '../views/HomeView.vue'
 import SuppliersView from '../views/master/SuppliersView.vue'
 import MaterialsView from '../views/master/MaterialsView.vue'
@@ -13,12 +15,13 @@ import PurchaseExecutionReportView from '../views/purchase/PurchaseExecutionRepo
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    { path: '/login', name: 'login', component: LoginView, meta: { title: '登录', public: true } },
     {
       path: '/',
       component: MainLayout,
       children: [
         { path: '', redirect: '/home' },
-        { path: 'home', name: 'home', component: HomeView, meta: { title: '首页' } },
+        { path: 'home', name: 'home', component: HomeView, meta: { title: '工作台' } },
         { path: 'master/suppliers', name: 'suppliers', component: SuppliersView, meta: { title: '供应商' } },
         { path: 'master/materials', name: 'materials', component: MaterialsView, meta: { title: '物料' } },
         { path: 'purchase/orders', name: 'po-list', component: PoListView, meta: { title: '采购订单' } },
@@ -37,8 +40,22 @@ const router = createRouter({
   ],
 })
 
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+  if (to.meta.public) {
+    if (to.name === 'login' && auth.isLoggedIn) {
+      return { path: '/home' }
+    }
+    return true
+  }
+  if (!auth.isLoggedIn) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  return true
+})
+
 router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} · SRM 管理端` : 'SRM 管理端'
+  document.title = to.meta.title ? `${to.meta.title} · 百得胜采购协同` : '百得胜采购协同'
 })
 
 export default router

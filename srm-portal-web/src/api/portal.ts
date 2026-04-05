@@ -1,6 +1,9 @@
 import { api } from './http'
+import { usePortalAuthStore } from '../stores/portalAuth'
 
-const supplierId = () => import.meta.env.VITE_DEV_SUPPLIER_ID || '1'
+function supplierId(): string {
+  return usePortalAuthStore().supplierId
+}
 
 export type PoSummary = {
   id: number

@@ -1,0 +1,7 @@
+/* 门户壳层：甄云式顶栏标签导航 + 灰底内容区 */
+
+:root {
+  --zy-tab-active: #1677ff;
+  --zy-header-border: #e8e8e8;
+  --zy-card-border: #f0f0f0;
+}

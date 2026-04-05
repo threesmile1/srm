@@ -15,7 +15,7 @@ onMounted(async () => {
 <template>
   <div class="page">
     <h2 class="title">已发布采购订单</h2>
-    <p class="hint">联调使用 <code>VITE_DEV_SUPPLIER_ID</code>（默认 1，对应种子供应商 S001）。</p>
+    <p class="hint">当前登录所填「供应商编号」决定可见数据范围（与后端 supplierId 一致）。</p>
     <el-table :data="rows" stripe style="margin-top: 16px" @row-dblclick="(row: PoSummary) => router.push(`/pos/${row.id}`)">
       <el-table-column prop="poNo" label="订单号" width="200" />
       <el-table-column prop="status" label="状态" width="100" />
@@ -31,9 +31,9 @@ onMounted(async () => {
 
 <style scoped>
 .page {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 24px;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 .title {
   font-size: 18px;

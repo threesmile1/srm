@@ -4,6 +4,7 @@ import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.service.PurchaseOrderService;
 import com.srm.web.error.BadRequestException;
+import com.srm.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -52,7 +53,7 @@ public class PortalPurchaseOrderController {
         long sid = resolveSupplierId(headerSupplierId, querySupplierId);
         PurchaseOrder po = purchaseOrderService.requireDetail(id);
         if (!po.getSupplier().getId().equals(sid)) {
-            throw new BadRequestException("无权查看该订单");
+            throw new NotFoundException("订单不存在");
         }
         return PurchaseOrderController.PoDetailResponse.from(po);
     }
