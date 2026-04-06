@@ -2,11 +2,14 @@ package com.srm.po.web;
 
 import com.srm.execution.service.AsnService;
 import com.srm.execution.web.AsnNoticeResponse;
+import com.srm.foundation.web.PortalSupplierSession;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,34 +31,39 @@ public class PortalAsnController {
 
     private final AsnService asnService;
 
+    @Transactional(readOnly = true)
     @GetMapping("/asn-notices")
     public List<AsnNoticeResponse> list(
+            HttpSession session,
             @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
             @RequestParam(value = "supplierId", required = false) Long querySupplierId
     ) {
-        long sid = PortalPurchaseOrderController.resolveSupplierId(headerSupplierId, querySupplierId);
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         return asnService.listForSupplier(sid).stream()
                 .map(AsnNoticeResponse::from)
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     @GetMapping("/asn-notices/{id}")
     public AsnNoticeResponse get(
             @PathVariable Long id,
+            HttpSession session,
             @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
             @RequestParam(value = "supplierId", required = false) Long querySupplierId
     ) {
-        long sid = PortalPurchaseOrderController.resolveSupplierId(headerSupplierId, querySupplierId);
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         return AsnNoticeResponse.from(asnService.requireWithLinesForSupplier(sid, id));
     }
 
     @PostMapping("/asn-notices")
     public AsnNoticeResponse create(
+            HttpSession session,
             @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
             @RequestParam(value = "supplierId", required = false) Long querySupplierId,
             @Valid @RequestBody PortalAsnCreateRequest body
     ) {
-        long sid = PortalPurchaseOrderController.resolveSupplierId(headerSupplierId, querySupplierId);
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         List<AsnService.AsnLineInput> lines = body.lines().stream()
                 .map(l -> new AsnService.AsnLineInput(l.purchaseOrderLineId(), l.shipQty()))
                 .toList();

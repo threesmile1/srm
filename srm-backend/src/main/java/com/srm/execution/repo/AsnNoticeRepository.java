@@ -28,4 +28,6 @@ public interface AsnNoticeRepository extends JpaRepository<AsnNotice, Long> {
             "purchaseOrder", "lines", "lines.purchaseOrderLine", "lines.purchaseOrderLine.material"
     })
     List<AsnNotice> findBySupplierOrderByIdDesc(Supplier supplier);
+
+    long countBySupplier_Id(Long supplierId);
 }

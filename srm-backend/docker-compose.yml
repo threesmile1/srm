@@ -3,6 +3,7 @@ services:
     image: mysql:8.0
     container_name: srm-mysql
     environment:
+      TZ: Asia/Shanghai
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: srm
       MYSQL_USER: srm

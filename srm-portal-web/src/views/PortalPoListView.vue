@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { portalApi, type PoSummary } from '../api/portal'
+import DataTableEmpty from '../components/DataTableEmpty.vue'
 
 const router = useRouter()
 const rows = ref<PoSummary[]>([])
@@ -15,8 +16,11 @@ onMounted(async () => {
 <template>
   <div class="page">
     <h2 class="title">已发布采购订单</h2>
-    <p class="hint">当前登录所填「供应商编号」决定可见数据范围（与后端 supplierId 一致）。</p>
+    <p class="hint">数据范围由登录会话中的供应商身份决定，无需在请求中传递供应商编号。</p>
     <el-table :data="rows" stripe style="margin-top: 16px" @row-dblclick="(row: PoSummary) => router.push(`/pos/${row.id}`)">
+      <template #empty>
+        <DataTableEmpty />
+      </template>
       <el-table-column prop="poNo" label="订单号" width="200" />
       <el-table-column prop="status" label="状态" width="100" />
       <el-table-column prop="supplierName" label="供应商" />

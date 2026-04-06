@@ -5,6 +5,7 @@ import com.srm.execution.domain.AsnNotice;
 import com.srm.execution.domain.AsnStatus;
 import com.srm.execution.repo.AsnLineRepository;
 import com.srm.execution.repo.AsnNoticeRepository;
+import com.srm.notification.service.NotificationService;
 import com.srm.master.domain.Supplier;
 import com.srm.master.service.MasterDataService;
 import com.srm.po.domain.PoStatus;
@@ -15,6 +16,7 @@ import com.srm.web.error.BadRequestException;
 import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AsnService {
@@ -34,6 +37,7 @@ public class AsnService {
     private final AsnLineRepository asnLineRepository;
     private final AsnNumberAllocator asnNumberAllocator;
     private final MasterDataService masterDataService;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<AsnNotice> listByPurchaseOrder(Long poId) {
@@ -128,7 +132,20 @@ public class AsnService {
             notice.getLines().add(al);
         }
 
-        return asnNoticeRepository.save(notice);
+        AsnNotice saved = asnNoticeRepository.save(notice);
+        try {
+            notificationService.send(
+                    null,
+                    saved.getSupplier().getId(),
+                    "发货通知已提交",
+                    "ASN " + saved.getAsnNo() + " 已提交，关联订单 " + po.getPoNo() + "。",
+                    "ASN_SUBMITTED",
+                    "ASN",
+                    saved.getId());
+        } catch (Exception e) {
+            log.warn("ASN 提交后写入供应商通知失败: {}", e.getMessage());
+        }
+        return saved;
     }
 
     public record AsnLineInput(long purchaseOrderLineId, BigDecimal shipQty) {}

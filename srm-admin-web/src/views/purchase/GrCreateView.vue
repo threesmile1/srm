@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit, type Warehouse } from '../../api/foundation'
 import { purchaseApi, type PoDetail, type PoSummary } from '../../api/purchase'
 import { executionApi } from '../../api/execution'
+import { PROC_ORG_STORAGE_PREFIX } from '../../composables/usePersistedProcurementOrg'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,7 +37,14 @@ async function loadOrgs() {
   const ou = await foundationApi.listOrgUnits(ledgers.data[0].id)
   orgs.value = ou.data.filter((o) => o.orgType === 'PROCUREMENT')
   if (procurementOrgId.value == null && orgs.value.length) {
-    procurementOrgId.value = qOrg.value ?? orgs.value[0].id
+    const key = PROC_ORG_STORAGE_PREFIX + 'gr-create'
+    const raw = sessionStorage.getItem(key)
+    let saved: number | null = null
+    if (raw) {
+      const n = Number(raw)
+      if (!Number.isNaN(n) && orgs.value.some((o) => o.id === n)) saved = n
+    }
+    procurementOrgId.value = qOrg.value ?? saved ?? orgs.value[0].id
   }
 }
 
@@ -76,7 +84,8 @@ async function loadPoDetail() {
   }
 }
 
-watch(procurementOrgId, async () => {
+watch(procurementOrgId, async (v) => {
+  if (v != null) sessionStorage.setItem(PROC_ORG_STORAGE_PREFIX + 'gr-create', String(v))
   await loadWh()
   await loadPos()
   await loadPoDetail()

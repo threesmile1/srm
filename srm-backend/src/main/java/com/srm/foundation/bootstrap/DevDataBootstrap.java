@@ -12,8 +12,11 @@ import com.srm.foundation.repo.RoleRepository;
 import com.srm.foundation.repo.UserAccountRepository;
 import com.srm.foundation.repo.WarehouseRepository;
 import com.srm.master.domain.Supplier;
+import com.srm.approval.domain.StepAction;
+import com.srm.approval.service.ApprovalService;
 import com.srm.master.repo.SupplierRepository;
 import com.srm.master.service.MasterDataService;
+import com.srm.po.domain.PoStatus;
 import com.srm.po.service.PurchaseOrderService;
 import com.srm.po.service.PurchaseOrderService.CreateLine;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +53,7 @@ public class DevDataBootstrap implements ApplicationRunner {
     private final SupplierRepository supplierRepository;
     private final MasterDataService masterDataService;
     private final PurchaseOrderService purchaseOrderService;
+    private final ApprovalService approvalService;
 
     @Override
     @Transactional
@@ -156,8 +160,21 @@ public class DevDataBootstrap implements ApplicationRunner {
                         null
                 ))
         );
-        purchaseOrderService.approve(po.getId());
-        purchaseOrderService.release(po.getId());
+        purchaseOrderService.submitForApproval(po.getId());
+        po = purchaseOrderService.requireDetail(po.getId());
+        if (po.getStatus() == PoStatus.PENDING_APPROVAL) {
+            var inst = approvalService.getInstanceByDoc("PO", po.getId());
+            if (inst != null) {
+                approvalService.processAction(inst.getId(), StepAction.APPROVED,
+                        null, "dev-seed", "开发环境自动审批");
+            }
+            po = purchaseOrderService.requireDetail(po.getId());
+        }
+        if (po.getStatus() == PoStatus.APPROVED) {
+            purchaseOrderService.release(po.getId());
+        } else {
+            log.warn("演示订单未处于已审核状态({})，跳过发布", po.getStatus());
+        }
 
         log.info("Master + PO seed done. portal / portal123 ; supplierId={} ; demo PO {}", supplier.getId(), po.getId());
     }

@@ -39,10 +39,18 @@ export type PoDetail = PoSummary & {
   lines: PoLine[]
 }
 
+export type PoImportResult = {
+  totalRows: number
+  ordersCreated: number
+  linesCreated: number
+  errors: string[]
+}
+
 export const purchaseApi = {
   list: (procurementOrgId: number) =>
     api.get<PoSummary[]>('/api/v1/purchase-orders', { params: { procurementOrgId } }),
   get: (id: number) => api.get<PoDetail>(`/api/v1/purchase-orders/${id}`),
+  submit: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/submit`),
   create: (body: {
     procurementOrgId: number
     supplierId: number
@@ -61,4 +69,9 @@ export const purchaseApi = {
   release: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/release`),
   cancel: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/cancel`),
   close: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/close`),
+  importOrders: (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post<PoImportResult>('/api/v1/purchase-orders/import', fd)
+  },
 }

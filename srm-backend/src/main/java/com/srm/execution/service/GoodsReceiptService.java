@@ -15,6 +15,7 @@ import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.repo.PurchaseOrderLineRepository;
 import com.srm.po.repo.PurchaseOrderRepository;
+import com.srm.notification.service.StaffNotificationService;
 import com.srm.web.error.BadRequestException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class GoodsReceiptService {
     private final AsnLineRepository asnLineRepository;
     private final GrNumberAllocator grNumberAllocator;
     private final SrmProperties srmProperties;
+    private final StaffNotificationService staffNotificationService;
 
     @Transactional(readOnly = true)
     public List<GoodsReceipt> listByOrg(Long procurementOrgId) {
@@ -141,7 +143,23 @@ public class GoodsReceiptService {
             purchaseOrderLineRepository.save(pol);
         }
 
-        return goodsReceiptRepository.save(gr);
+        GoodsReceipt saved = goodsReceiptRepository.save(gr);
+        staffNotificationService.notifyProcurementOrgStakeholders(
+                procurementOrgId,
+                "收货单已登记",
+                "收货单 " + saved.getGrNo() + " 已创建，关联订单 " + po.getPoNo() + "。",
+                "GR_CREATED",
+                "GR",
+                saved.getId());
+
+        boolean allReceived = po.getLines().stream()
+                .allMatch(l -> l.getReceivedQty().compareTo(l.getQty()) >= 0);
+        if (allReceived) {
+            po.setStatus(PoStatus.CLOSED);
+            purchaseOrderRepository.save(po);
+        }
+
+        return saved;
     }
 
     public record GrLineInput(Long purchaseOrderLineId, BigDecimal receivedQty, Long asnLineId) {}

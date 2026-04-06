@@ -99,7 +99,6 @@ onMounted(load)
     </el-dialog>
   </div>
 </template>
-
 <style scoped>
 .page {
   max-width: none;
@@ -117,3 +116,4 @@ onMounted(load)
   margin: 0;
 }
 </style>
+

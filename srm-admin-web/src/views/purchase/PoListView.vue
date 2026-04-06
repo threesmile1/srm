@@ -2,24 +2,29 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Upload as UploadIcon } from '@element-plus/icons-vue'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
-import { purchaseApi, type PoSummary } from '../../api/purchase'
+import { purchaseApi, type PoSummary, type PoImportResult } from '../../api/purchase'
 import { executionApi, downloadArrayBuffer } from '../../api/execution'
+import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
+import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
 const router = useRouter()
 const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
+usePersistedProcurementOrg(orgId, orgs, 'po-list')
 const rows = ref<PoSummary[]>([])
 const tableRef = ref()
+
+const importDialogVisible = ref(false)
+const importResult = ref<PoImportResult | null>(null)
+const importing = ref(false)
 
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
   if (!ledgers.data.length) return
   const ou = await foundationApi.listOrgUnits(ledgers.data[0].id)
   orgs.value = ou.data.filter((o) => o.orgType === 'PROCUREMENT')
-  if (orgs.value.length && orgId.value == null) {
-    orgId.value = orgs.value[0].id
-  }
 }
 
 async function loadPos() {
@@ -60,6 +65,24 @@ async function exportSelected() {
     ElMessage.error(msg || '导出失败')
   }
 }
+
+async function handleImport(uploadFile: { raw: File }) {
+  importing.value = true
+  importResult.value = null
+  try {
+    const r = await purchaseApi.importOrders(uploadFile.raw)
+    importResult.value = r.data
+    if (r.data.errors.length === 0) {
+      ElMessage.success(`导入完成：创建 ${r.data.ordersCreated} 个订单，${r.data.linesCreated} 行`)
+      importDialogVisible.value = false
+    }
+    await loadPos()
+  } catch {
+    ElMessage.error('导入失败')
+  } finally {
+    importing.value = false
+  }
+}
 </script>
 
 <template>
@@ -70,9 +93,13 @@ async function exportSelected() {
         <el-option v-for="o in orgs" :key="o.id" :label="`${o.code} ${o.name}`" :value="o.id" />
       </el-select>
       <el-button type="primary" @click="$router.push('/purchase/orders/new')">新建</el-button>
+      <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
       <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
     <el-table ref="tableRef" :data="rows" stripe @row-dblclick="(row: PoSummary) => goDetail(row.id)">
+      <template #empty>
+        <DataTableEmpty />
+      </template>
       <el-table-column type="selection" width="42" />
       <el-table-column prop="poNo" label="订单号" width="200" />
       <el-table-column prop="status" label="状态" width="100" />
@@ -86,6 +113,39 @@ async function exportSelected() {
         </template>
       </el-table-column>
     </el-table>
+    <el-dialog v-model="importDialogVisible" title="Excel 导入采购订单" width="620px">
+      <div class="import-hint">
+        <p>Excel 模板列顺序：<b>采购组织编码 | 供应商编码 | 币种 | 备注 | 物料编码 | 仓库编码 | 数量 | 单价 | 交期(yyyy-MM-dd)</b></p>
+        <p>第一行为表头（将跳过）。相同(组织+供应商+币种+备注)的连续行将合并为同一个订单。</p>
+      </div>
+      <el-upload
+        drag
+        :auto-upload="false"
+        accept=".xlsx,.xls"
+        :limit="1"
+        :on-change="handleImport"
+        :disabled="importing"
+        :show-file-list="false"
+      >
+        <div style="padding:20px 0">
+          <el-icon style="font-size:40px;color:var(--el-color-primary)"><UploadIcon /></el-icon>
+          <div style="margin-top:8px">{{ importing ? '导入中...' : '点击或拖拽上传 Excel 文件' }}</div>
+        </div>
+      </el-upload>
+      <div v-if="importResult" class="import-result">
+        <el-descriptions :column="3" border size="small">
+          <el-descriptions-item label="总行数">{{ importResult.totalRows }}</el-descriptions-item>
+          <el-descriptions-item label="创建订单">{{ importResult.ordersCreated }}</el-descriptions-item>
+          <el-descriptions-item label="创建行数">{{ importResult.linesCreated }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="importResult.errors.length" class="import-errors">
+          <p style="font-weight:600;color:var(--el-color-danger);margin:12px 0 4px">错误明细：</p>
+          <ul>
+            <li v-for="(err, i) in importResult.errors" :key="i">{{ err }}</li>
+          </ul>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -103,5 +163,23 @@ async function exportSelected() {
 .title {
   font-size: 18px;
   font-weight: 600;
+}
+.import-hint {
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.import-result {
+  margin-top: 16px;
+}
+.import-errors ul {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--el-color-danger);
 }
 </style>

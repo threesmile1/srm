@@ -2,21 +2,20 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Key } from '@element-plus/icons-vue'
+import { User, Lock } from '@element-plus/icons-vue'
 import { usePortalAuthStore } from '../stores/portalAuth'
 
 const router = useRouter()
 const auth = usePortalAuthStore()
 
-const username = ref('portal')
+const username = ref('')
 const password = ref('')
-const supplierId = ref('1')
 const loading = ref(false)
 
 async function submit() {
   loading.value = true
   try {
-    auth.login(username.value, password.value, supplierId.value)
+    await auth.login(username.value, password.value)
     ElMessage.success('登录成功')
     await router.replace((router.currentRoute.value.query.redirect as string) || '/pos')
   } catch (e) {
@@ -36,7 +35,7 @@ async function submit() {
         <h1>百得胜采购协同平台</h1>
         <p class="sub">供应商门户 · 订单确认 · 发货通知 ASN</p>
       </div>
-      <el-form class="login-form" label-position="top" @submit.prevent="submit">
+      <el-form class="login-form" @submit.prevent="submit">
         <el-form-item>
           <el-input
             v-model="username"
@@ -59,20 +58,10 @@ async function submit() {
             @keyup.enter="submit"
           />
         </el-form-item>
-        <el-form-item label="供应商编号" class="sid-item">
-          <el-input
-            v-model="supplierId"
-            size="large"
-            placeholder="数据范围（对应后端 supplierId）"
-            :prefix-icon="Key"
-            clearable
-            @keyup.enter="submit"
-          />
-        </el-form-item>
         <el-button type="primary" size="large" class="login-btn" :loading="loading" native-type="submit">
           登 录
         </el-button>
-        <p class="hint">演示：<strong>portal</strong> / <strong>portal123</strong> · 供应商编号种子一般为 <strong>1</strong></p>
+        <p class="hint">使用管理员分配的供应商账号登录</p>
       </el-form>
     </div>
   </div>
@@ -150,11 +139,6 @@ async function submit() {
   margin-top: 4px;
 }
 
-.sid-item :deep(.el-form-item__label) {
-  font-size: 13px;
-  color: #4b5563;
-}
-
 .login-btn {
   width: 100%;
   margin-top: 4px;
@@ -170,5 +154,4 @@ async function submit() {
   text-align: center;
   line-height: 1.5;
 }
-
 </style>

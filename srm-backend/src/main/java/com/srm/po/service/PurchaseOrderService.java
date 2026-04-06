@@ -1,14 +1,20 @@
 package com.srm.po.service;
 
+import com.srm.approval.domain.ApprovalInstance;
+import com.srm.approval.domain.ApprovalStatus;
+import com.srm.approval.service.ApprovalService;
 import com.srm.foundation.domain.Ledger;
 import com.srm.foundation.domain.OrgUnit;
 import com.srm.foundation.domain.OrgUnitType;
 import com.srm.foundation.domain.Warehouse;
 import com.srm.foundation.repo.OrgUnitRepository;
 import com.srm.foundation.repo.WarehouseRepository;
+import com.srm.foundation.service.AuditService;
 import com.srm.master.domain.MaterialItem;
 import com.srm.master.domain.Supplier;
 import com.srm.master.service.MasterDataService;
+import com.srm.notification.service.NotificationService;
+import com.srm.notification.service.StaffNotificationService;
 import com.srm.po.domain.PoStatus;
 import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
@@ -18,6 +24,7 @@ import com.srm.web.error.BadRequestException;
 import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +34,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PurchaseOrderService {
@@ -37,6 +45,10 @@ public class PurchaseOrderService {
     private final WarehouseRepository warehouseRepository;
     private final MasterDataService masterDataService;
     private final PoNumberService poNumberService;
+    private final AuditService auditService;
+    private final ApprovalService approvalService;
+    private final NotificationService notificationService;
+    private final StaffNotificationService staffNotificationService;
 
     @Transactional(readOnly = true)
     public List<PurchaseOrder> listByOrg(Long procurementOrgId) {
@@ -59,6 +71,7 @@ public class PurchaseOrderService {
         }
         Supplier supplier = masterDataService.requireSupplier(supplierId);
         masterDataService.assertSupplierAuthorizedForOrg(supplier, org);
+        masterDataService.assertSupplierAllowedForPurchaseOrder(supplier);
 
         Ledger ledger = org.getLedger();
         if (ledger == null) {
@@ -105,17 +118,51 @@ public class PurchaseOrderService {
             throw new BadRequestException("订单至少一行");
         }
 
-        return purchaseOrderRepository.save(po);
+        PurchaseOrder saved = purchaseOrderRepository.save(po);
+        auditService.log(null, null, "CREATE_PO", "PO", saved.getId(),
+                "poNo=" + saved.getPoNo() + " lines=" + saved.getLines().size(), null);
+        return saved;
     }
 
     @Transactional
-    public PurchaseOrder approve(Long id) {
+    public PurchaseOrder submitForApproval(Long id) {
         PurchaseOrder po = requireDetail(id);
         if (po.getStatus() != PoStatus.DRAFT) {
-            throw new BadRequestException("仅草稿可提交审核通过，当前状态: " + po.getStatus());
+            throw new BadRequestException("仅草稿可提交审批，当前状态: " + po.getStatus());
         }
-        po.setStatus(PoStatus.APPROVED);
+
+        BigDecimal totalAmount = po.getLines().stream()
+                .map(PurchaseOrderLine::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        try {
+            approvalService.startApproval("PO", po.getId(), po.getPoNo(), totalAmount);
+            po.setStatus(PoStatus.PENDING_APPROVAL);
+        } catch (Exception e) {
+            log.warn("PO审批流程启动失败(无匹配规则则自动审批): {}", e.getMessage());
+            po.setStatus(PoStatus.APPROVED);
+        }
+        auditService.log(null, null, "SUBMIT_PO", "PO", id, "poNo=" + po.getPoNo(), null);
         return purchaseOrderRepository.save(po);
+    }
+
+    /**
+     * 已不再支持从单据页「一键审核」：请使用 {@link #submitForApproval(Long)} 发起审批，
+     * 在审批中心处理；引擎回调会写回状态。保留方法仅为避免误调用时给出明确错误。
+     */
+    @Transactional
+    public PurchaseOrder approve(Long id) {
+        PurchaseOrder po = requireDetail(id);
+        if (po.getStatus() == PoStatus.DRAFT) {
+            throw new BadRequestException("请使用「提交审批」发起流程；无匹配审批规则时将自动通过。");
+        }
+        if (po.getStatus() == PoStatus.PENDING_APPROVAL) {
+            ApprovalInstance inst = approvalService.getInstanceByDoc("PO", id);
+            if (inst != null && inst.getStatus() == ApprovalStatus.PENDING) {
+                throw new BadRequestException("订单已进入审批流程，请在「审批中心」处理。");
+            }
+            throw new BadRequestException("订单状态异常，请刷新后重试或联系管理员。");
+        }
+        throw new BadRequestException("当前状态不可执行该操作: " + po.getStatus());
     }
 
     @Transactional
@@ -125,7 +172,21 @@ public class PurchaseOrderService {
             throw new BadRequestException("仅已审核订单可发布，当前状态: " + po.getStatus());
         }
         po.setStatus(PoStatus.RELEASED);
-        return purchaseOrderRepository.save(po);
+        PurchaseOrder saved = purchaseOrderRepository.save(po);
+        auditService.log(null, null, "RELEASE_PO", "PO", id, "poNo=" + po.getPoNo(), null);
+        try {
+            notificationService.send(
+                    null,
+                    saved.getSupplier().getId(),
+                    "新采购订单已发布",
+                    "订单号 " + saved.getPoNo() + " 已发布，请在门户确认交期与数量。",
+                    "PO_RELEASED",
+                    "PO",
+                    saved.getId());
+        } catch (Exception e) {
+            log.warn("PO 发布后写入供应商通知失败: {}", e.getMessage());
+        }
+        return saved;
     }
 
     @Transactional
@@ -135,6 +196,7 @@ public class PurchaseOrderService {
             throw new BadRequestException("仅草稿或已审核可取消，当前状态: " + po.getStatus());
         }
         po.setStatus(PoStatus.CANCELLED);
+        auditService.log(null, null, "CANCEL_PO", "PO", id, "poNo=" + po.getPoNo(), null);
         return purchaseOrderRepository.save(po);
     }
 
@@ -145,6 +207,7 @@ public class PurchaseOrderService {
             throw new BadRequestException("仅已发布可关闭，当前状态: " + po.getStatus());
         }
         po.setStatus(PoStatus.CLOSED);
+        auditService.log(null, null, "CLOSE_PO", "PO", id, "poNo=" + po.getPoNo(), null);
         return purchaseOrderRepository.save(po);
     }
 
@@ -170,7 +233,15 @@ public class PurchaseOrderService {
         line.setPromisedDate(promisedDate);
         line.setSupplierRemark(supplierRemark);
         line.setConfirmedAt(Instant.now());
-        return purchaseOrderLineRepository.save(line);
+        PurchaseOrderLine saved = purchaseOrderLineRepository.save(line);
+        staffNotificationService.notifyProcurementOrgStakeholders(
+                po.getProcurementOrg().getId(),
+                "订单行已确认",
+                "订单 " + po.getPoNo() + " 第 " + saved.getLineNo() + " 行已由供应商确认交期与数量。",
+                "PO_LINE_CONFIRMED",
+                "PO",
+                po.getId());
+        return saved;
     }
 
     public record CreateLine(

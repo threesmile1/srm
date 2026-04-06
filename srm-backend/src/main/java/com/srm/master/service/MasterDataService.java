@@ -5,6 +5,7 @@ import com.srm.foundation.domain.OrgUnitType;
 import com.srm.foundation.repo.OrgUnitRepository;
 import com.srm.master.domain.MaterialItem;
 import com.srm.master.domain.Supplier;
+import com.srm.master.domain.SupplierLifecycleStatus;
 import com.srm.master.repo.MaterialItemRepository;
 import com.srm.master.repo.SupplierRepository;
 import com.srm.web.error.BadRequestException;
@@ -118,6 +119,19 @@ public class MasterDataService {
                 .contains(procurementOrg.getId());
         if (!ok) {
             throw new BadRequestException("供应商未授权在当前采购组织交易: " + procurementOrg.getCode());
+        }
+    }
+
+    /**
+     * 新建 PO / PR 转单等场景：禁止待审核、黑名单、淘汰供应商参与采购。
+     */
+    public void assertSupplierAllowedForPurchaseOrder(Supplier supplier) {
+        SupplierLifecycleStatus st = supplier.getLifecycleStatus();
+        if (st == SupplierLifecycleStatus.PENDING_REVIEW
+                || st == SupplierLifecycleStatus.BLACKLISTED
+                || st == SupplierLifecycleStatus.ELIMINATED) {
+            throw new BadRequestException(
+                    "供应商状态为 " + st.name() + "，不可新建采购订单或请购转单: " + supplier.getCode());
         }
     }
 }

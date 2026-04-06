@@ -63,6 +63,36 @@ export type PurchaseExecutionRow = {
   openQty: string
 }
 
+export type ReportMonthAmount = {
+  month: string
+  amount: number
+}
+
+export type SupplierShareRow = {
+  supplierCode: string
+  supplierName: string
+  amount: number
+  sharePercent: number
+}
+
+export type DeliveryAchievement = {
+  completedOnTime: number
+  completedLate: number
+  openWithDueDate: number
+  onTimeRatePercent: number
+}
+
+export type PriceAnalysisRow = {
+  materialCode: string
+  materialName: string
+  minUnitPrice: number
+  maxUnitPrice: number
+  avgUnitPrice: number
+  lineCount: number
+  totalAmount: number
+  volatilityPercent: number
+}
+
 const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 export function downloadArrayBuffer(buf: ArrayBuffer, filename: string, mime = xlsxMime) {
@@ -101,4 +131,24 @@ export const executionApi = {
 
   purchaseExecutionReport: (procurementOrgId: number) =>
     api.get<PurchaseExecutionRow[]>('/api/v1/reports/purchase-execution', { params: { procurementOrgId } }),
+
+  purchaseAmountTrend: (procurementOrgId: number, months = 12) =>
+    api.get<ReportMonthAmount[]>('/api/v1/reports/analytics/purchase-amount-trend', {
+      params: { procurementOrgId, months },
+    }),
+
+  supplierShare: (procurementOrgId: number, from: string, to: string) =>
+    api.get<SupplierShareRow[]>('/api/v1/reports/analytics/supplier-share', {
+      params: { procurementOrgId, from, to },
+    }),
+
+  deliveryAchievement: (procurementOrgId: number) =>
+    api.get<DeliveryAchievement>('/api/v1/reports/analytics/delivery-achievement', {
+      params: { procurementOrgId },
+    }),
+
+  priceAnalysis: (procurementOrgId: number, from: string, limit = 20) =>
+    api.get<PriceAnalysisRow[]>('/api/v1/reports/analytics/price-analysis', {
+      params: { procurementOrgId, from, limit },
+    }),
 }

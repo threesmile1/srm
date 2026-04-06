@@ -6,6 +6,7 @@ import com.srm.foundation.domain.OrgUnitType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface OrgUnitRepository extends JpaRepository<OrgUnit, Long> {
 
@@ -14,4 +15,6 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, Long> {
     List<OrgUnit> findByLedgerAndOrgTypeOrderByCodeAsc(Ledger ledger, OrgUnitType orgType);
 
     boolean existsByLedgerAndCode(Ledger ledger, String code);
+
+    Optional<OrgUnit> findByCode(String code);
 }

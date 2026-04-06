@@ -3,18 +3,30 @@ import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { purchaseApi, type PoDetail } from '../../api/purchase'
+import { approvalApi, type ApprovalInstance } from '../../api/approval'
 import { executionApi, type AsnNotice } from '../../api/execution'
 
 const route = useRoute()
 const router = useRouter()
 const po = ref<PoDetail | null>(null)
 const asnList = ref<AsnNotice[]>([])
+const approvalInst = ref<ApprovalInstance | null | undefined>(undefined)
 const tab = ref<'lines' | 'asn'>('lines')
 
 async function load() {
   const id = Number(route.params.id)
   const r = await purchaseApi.get(id)
   po.value = r.data
+  if (po.value?.status === 'PENDING_APPROVAL') {
+    try {
+      const ar = await approvalApi.getByDoc('PO', id)
+      approvalInst.value = ar.data
+    } catch {
+      approvalInst.value = null
+    }
+  } else {
+    approvalInst.value = undefined
+  }
 }
 
 async function loadAsn() {
@@ -77,9 +89,23 @@ onMounted(async () => {
       <el-descriptions-item label="备注" :span="2">{{ po.remark || '—' }}</el-descriptions-item>
     </el-descriptions>
 
+    <el-alert
+      v-if="po.status === 'PENDING_APPROVAL' && approvalInst?.status === 'PENDING'"
+      type="info"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px"
+      title="该订单已在审批流程中，请在「审批中心」处理。"
+    >
+      <el-button type="primary" link @click="router.push('/approval/list')">前往审批中心</el-button>
+    </el-alert>
     <div class="actions">
-      <el-button v-if="po.status === 'DRAFT'" type="primary" @click="act(() => purchaseApi.approve(po!.id), '已审核')">
-        审核通过
+      <el-button
+        v-if="po.status === 'DRAFT'"
+        type="primary"
+        @click="act(() => purchaseApi.submit(po!.id), '已提交审批')"
+      >
+        提交审批
       </el-button>
       <el-button v-if="po.status === 'APPROVED'" type="success" @click="act(() => purchaseApi.release(po!.id), '已发布')">
         发布供应商

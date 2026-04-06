@@ -2,6 +2,8 @@ package com.srm.po.web;
 
 import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
+import com.srm.po.service.PoImportService;
+import com.srm.po.service.PoImportService.PoImportResult;
 import com.srm.po.service.PurchaseOrderService;
 import com.srm.po.service.PurchaseOrderService.CreateLine;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -28,6 +31,7 @@ import java.util.List;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
+    private final PoImportService poImportService;
 
     @GetMapping
     public List<PoSummaryResponse> list(@RequestParam Long procurementOrgId) {
@@ -59,6 +63,17 @@ public class PurchaseOrderController {
                 req.remark(),
                 lines);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(po.getId()));
+    }
+
+    @PostMapping("/import")
+    public PoImportResult importOrders(@RequestParam("file") MultipartFile file) {
+        return poImportService.importOrders(file);
+    }
+
+    @PostMapping("/{id}/submit")
+    public PoDetailResponse submit(@PathVariable Long id) {
+        purchaseOrderService.submitForApproval(id);
+        return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
 
     @PostMapping("/{id}/approve")

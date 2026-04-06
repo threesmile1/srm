@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -20,7 +23,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = {
             "lines", "lines.material", "lines.warehouse",
-            "procurementOrg", "ledger", "supplier", "supplier.authorizedProcurementOrgs"
+            "procurementOrg", "ledger", "supplier"
     })
     Optional<PurchaseOrder> findWithDetailsById(Long id);
 
@@ -33,4 +36,46 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     @EntityGraph(attributePaths = {"lines", "lines.material", "lines.warehouse", "ledger", "procurementOrg", "supplier"})
     @Query("select distinct p from PurchaseOrder p where p.procurementOrg.id = :oid and p.status in :statuses order by p.id desc")
     List<PurchaseOrder> findWithLinesForReport(@Param("oid") Long oid, @Param("statuses") Collection<PoStatus> statuses);
+
+    @Query(value = "select coalesce(sum(pol.amount),0) from purchase_order_line pol " +
+            "join purchase_order po on po.id = pol.purchase_order_id " +
+            "where (:sid is null or po.supplier_id = :sid) and po.procurement_org_id = :oid " +
+            "and DATE(po.created_at) >= :fromDate and DATE(po.created_at) <= :toDate " +
+            "and po.status not in ('CANCELLED','DRAFT')", nativeQuery = true)
+    BigDecimal sumAmountBySupplierAndOrgAndPeriod(@Param("sid") Long supplierId,
+                                                   @Param("oid") Long orgId,
+                                                   @Param("fromDate") LocalDate from,
+                                                   @Param("toDate") LocalDate to);
+
+    long countByProcurementOrgIdAndStatus(Long procurementOrgId, PoStatus status);
+
+    /**
+     * 已发布订单中，仍有可收货余额的订单行数（qty &gt; coalesce(receivedQty,0)）。
+     */
+    @Query("""
+            select count(l) from PurchaseOrderLine l
+            join l.purchaseOrder po
+            where po.procurementOrg.id = :procurementOrgId
+            and po.status = :released
+            and l.qty > coalesce(l.receivedQty, 0)
+            """)
+    long countOpenReceiveLinesByProcurementOrg(@Param("procurementOrgId") Long procurementOrgId,
+                                               @Param("released") PoStatus released);
+
+    @Query("""
+            select s.code, s.name, coalesce(sum(l.amount), 0)
+            from PurchaseOrderLine l
+            join l.purchaseOrder po
+            join po.supplier s
+            where po.procurementOrg.id = :oid
+            and po.status not in :excluded
+            and po.createdAt >= :from
+            and po.createdAt < :toExclusive
+            group by s.id, s.code, s.name
+            order by coalesce(sum(l.amount), 0) desc
+            """)
+    List<Object[]> sumLineAmountGroupedBySupplier(@Param("oid") Long oid,
+                                                  @Param("excluded") Collection<PoStatus> excluded,
+                                                  @Param("from") Instant from,
+                                                  @Param("toExclusive") Instant toExclusive);
 }

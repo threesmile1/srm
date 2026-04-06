@@ -1,14 +1,16 @@
 package com.srm.po.web;
 
+import com.srm.foundation.web.PortalSupplierSession;
 import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.service.PurchaseOrderService;
-import com.srm.web.error.BadRequestException;
 import com.srm.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,7 +25,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * A4 供应商门户 API。一期联调：通过请求头 {@code X-Dev-Supplier-Id} 或查询参数 {@code supplierId} 标识供应商。
+ * A4 供应商门户 API。供应商身份以会话 {@code SESSION_SUPPLIER_ID} 为准；无则可传 {@code X-Dev-Supplier-Id} / {@code supplierId} 联调。
  */
 @Tag(name = "PortalPO", description = "A4 门户采购协同")
 @RestController
@@ -33,24 +35,28 @@ public class PortalPurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
 
+    @Transactional(readOnly = true)
     @GetMapping("/purchase-orders")
     public List<PurchaseOrderController.PoSummaryResponse> listReleased(
+            HttpSession session,
             @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
             @RequestParam(value = "supplierId", required = false) Long querySupplierId
     ) {
-        long sid = resolveSupplierId(headerSupplierId, querySupplierId);
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         return purchaseOrderService.listReleasedForSupplier(sid).stream()
                 .map(PurchaseOrderController.PoSummaryResponse::from)
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     @GetMapping("/purchase-orders/{id}")
     public PurchaseOrderController.PoDetailResponse getDetail(
             @PathVariable Long id,
+            HttpSession session,
             @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
             @RequestParam(value = "supplierId", required = false) Long querySupplierId
     ) {
-        long sid = resolveSupplierId(headerSupplierId, querySupplierId);
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         PurchaseOrder po = purchaseOrderService.requireDetail(id);
         if (!po.getSupplier().getId().equals(sid)) {
             throw new NotFoundException("订单不存在");
@@ -61,24 +67,15 @@ public class PortalPurchaseOrderController {
     @PostMapping("/purchase-order-lines/{lineId}/confirm")
     public PurchaseOrderController.PoLineResponse confirmLine(
             @PathVariable Long lineId,
+            HttpSession session,
             @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
             @RequestParam(value = "supplierId", required = false) Long querySupplierId,
             @Valid @RequestBody LineConfirmRequest body
     ) {
-        long sid = resolveSupplierId(headerSupplierId, querySupplierId);
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         PurchaseOrderLine line = purchaseOrderService.confirmLine(
                 sid, lineId, body.confirmedQty(), body.promisedDate(), body.supplierRemark());
         return PurchaseOrderController.PoLineResponse.from(line);
-    }
-
-    public static long resolveSupplierId(Long headerSupplierId, Long querySupplierId) {
-        if (headerSupplierId != null) {
-            return headerSupplierId;
-        }
-        if (querySupplierId != null) {
-            return querySupplierId;
-        }
-        throw new BadRequestException("请设置请求头 X-Dev-Supplier-Id 或查询参数 supplierId（一期联调）");
     }
 
     public record LineConfirmRequest(

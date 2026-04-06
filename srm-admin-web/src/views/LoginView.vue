@@ -15,7 +15,7 @@ const loading = ref(false)
 async function submit() {
   loading.value = true
   try {
-    auth.login(username.value, password.value)
+    await auth.login(username.value, password.value)
     ElMessage.success('登录成功')
     await router.replace((router.currentRoute.value.query.redirect as string) || '/home')
   } catch (e) {

@@ -2,6 +2,8 @@ package com.srm.master.web;
 
 import com.srm.master.domain.MaterialItem;
 import com.srm.master.domain.Supplier;
+import com.srm.master.service.MasterDataImportService;
+import com.srm.master.service.MasterDataImportService.ImportResult;
 import com.srm.master.service.MasterDataService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -14,7 +16,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Set;
@@ -27,6 +31,7 @@ import java.util.stream.Collectors;
 public class MasterDataController {
 
     private final MasterDataService masterDataService;
+    private final MasterDataImportService importService;
 
     @GetMapping("/suppliers")
     public List<SupplierResponse> listSuppliers() {
@@ -44,6 +49,16 @@ public class MasterDataController {
     public SupplierResponse updateSupplier(@PathVariable Long id, @Valid @RequestBody SupplierUpdateRequest req) {
         masterDataService.updateSupplier(id, req.name(), req.u9VendorCode(), req.taxId(), req.procurementOrgIds());
         return SupplierResponse.from(masterDataService.requireSupplier(id));
+    }
+
+    @PostMapping("/suppliers/import")
+    public ImportResult importSuppliers(@RequestParam("file") MultipartFile file) {
+        return importService.importSuppliers(file);
+    }
+
+    @PostMapping("/materials/import")
+    public ImportResult importMaterials(@RequestParam("file") MultipartFile file) {
+        return importService.importMaterials(file);
     }
 
     @GetMapping("/materials")
@@ -69,6 +84,7 @@ public class MasterDataController {
             String name,
             String u9VendorCode,
             String taxId,
+            String lifecycleStatus,
             Set<Long> procurementOrgIds
     ) {
         static SupplierResponse from(Supplier s) {
@@ -78,6 +94,7 @@ public class MasterDataController {
                     s.getName(),
                     s.getU9VendorCode(),
                     s.getTaxId(),
+                    s.getLifecycleStatus() != null ? s.getLifecycleStatus().name() : null,
                     s.getAuthorizedProcurementOrgs().stream().map(com.srm.foundation.domain.OrgUnit::getId)
                             .collect(Collectors.toSet())
             );

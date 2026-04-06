@@ -3,9 +3,12 @@ import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { executionApi, downloadArrayBuffer, type GrDetail, type GrSummary } from '../../api/execution'
+import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
+import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
 const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
+usePersistedProcurementOrg(orgId, orgs, 'gr-list')
 const rows = ref<GrSummary[]>([])
 const tableRef = ref()
 const drawer = ref(false)
@@ -16,7 +19,6 @@ async function loadOrgs() {
   if (!ledgers.data.length) return
   const ou = await foundationApi.listOrgUnits(ledgers.data[0].id)
   orgs.value = ou.data.filter((o) => o.orgType === 'PROCUREMENT')
-  if (orgs.value.length && orgId.value == null) orgId.value = orgs.value[0].id
 }
 
 async function loadRows() {
@@ -72,6 +74,9 @@ async function exportSelected() {
       <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
     <el-table ref="tableRef" :data="rows" stripe @row-dblclick="(row: GrSummary) => openDetail(row)">
+      <template #empty>
+        <DataTableEmpty />
+      </template>
       <el-table-column type="selection" width="42" />
       <el-table-column prop="grNo" label="收货单号" width="160" />
       <el-table-column prop="poNo" label="采购订单" width="160" />

@@ -3,6 +3,8 @@ package com.srm.po.domain;
 public enum PoStatus {
     /** 草稿 */
     DRAFT,
+    /** 待审批 */
+    PENDING_APPROVAL,
     /** 已审核（可发布） */
     APPROVED,
     /** 已发布供应商 */

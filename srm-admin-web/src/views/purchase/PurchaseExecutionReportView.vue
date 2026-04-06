@@ -2,9 +2,12 @@
 import { onMounted, ref, watch } from 'vue'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { executionApi, type PurchaseExecutionRow } from '../../api/execution'
+import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
+import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
 const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
+usePersistedProcurementOrg(orgId, orgs, 'report-execution')
 const rows = ref<PurchaseExecutionRow[]>([])
 
 async function loadOrgs() {
@@ -12,7 +15,6 @@ async function loadOrgs() {
   if (!ledgers.data.length) return
   const ou = await foundationApi.listOrgUnits(ledgers.data[0].id)
   orgs.value = ou.data.filter((o) => o.orgType === 'PROCUREMENT')
-  if (orgs.value.length && orgId.value == null) orgId.value = orgs.value[0].id
 }
 
 async function loadReport() {
@@ -41,6 +43,9 @@ onMounted(async () => {
     </div>
     <p class="hint">已发布/已关闭订单行：订购、已收、未清数量。</p>
     <el-table :data="rows" stripe>
+      <template #empty>
+        <DataTableEmpty />
+      </template>
       <el-table-column prop="poNo" label="订单号" width="160" />
       <el-table-column prop="poStatus" label="订单状态" width="100" />
       <el-table-column prop="lineNo" label="行" width="50" />

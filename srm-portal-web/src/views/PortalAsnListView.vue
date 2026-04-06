@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { portalApi, type AsnNotice } from '../api/portal'
+import DataTableEmpty from '../components/DataTableEmpty.vue'
 
 const rows = ref<AsnNotice[]>([])
 
@@ -19,6 +20,9 @@ onMounted(async () => {
       数据范围与登录时供应商编号一致
     </p>
     <el-table :data="rows" stripe style="margin-top: 16px">
+      <template #empty>
+        <DataTableEmpty />
+      </template>
       <el-table-column prop="asnNo" label="ASN 单号" width="160" />
       <el-table-column prop="poNo" label="采购订单" width="160" />
       <el-table-column prop="shipDate" label="发货日" width="120" />

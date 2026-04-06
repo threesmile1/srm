@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   HomeFilled,
@@ -15,8 +15,17 @@ import {
   Fold,
   Expand,
   User,
+  List,
+  Stamp,
+  Medal,
+  Money,
+  Tickets,
+  Bell,
+  ChatDotRound,
+  Sell,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
+import { notificationApi } from '../api/notification'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,13 +34,67 @@ const auth = useAuthStore()
 const collapsed = ref(false)
 const asideWidth = computed(() => (collapsed.value ? 64 : 220))
 
+const unreadNotifications = ref(0)
+let unreadPollTimer: ReturnType<typeof setInterval> | undefined
+
+async function pollUnreadNotifications() {
+  try {
+    const r = await notificationApi.unreadCount()
+    unreadNotifications.value = r.data.count ?? 0
+  } catch {
+    unreadNotifications.value = 0
+  }
+}
+
+function onWindowFocus() {
+  pollUnreadNotifications()
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') pollUnreadNotifications()
+}
+
+function onInboxUpdated() {
+  pollUnreadNotifications()
+}
+
+onMounted(() => {
+  if (auth.isLoggedIn) pollUnreadNotifications()
+  unreadPollTimer = setInterval(pollUnreadNotifications, 60_000)
+  window.addEventListener('focus', onWindowFocus)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('srm-admin-inbox-updated', onInboxUpdated as EventListener)
+})
+
+onBeforeUnmount(() => {
+  if (unreadPollTimer) clearInterval(unreadPollTimer)
+  window.removeEventListener('focus', onWindowFocus)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  window.removeEventListener('srm-admin-inbox-updated', onInboxUpdated as EventListener)
+})
+
+watch(
+  () => auth.isLoggedIn,
+  (v) => {
+    if (v) pollUnreadNotifications()
+    else unreadNotifications.value = 0
+  },
+)
+
+watch(
+  () => route.path,
+  (p) => {
+    if (p === '/notifications') pollUnreadNotifications()
+  },
+)
+
 const breadcrumbs = computed(() => {
   const m = route.meta.title as string | undefined
   return m ? [{ title: m }] : []
 })
 
-function logout() {
-  auth.logout()
+async function logout() {
+  await auth.logout()
   router.push('/login')
 }
 </script>
@@ -76,6 +139,20 @@ function logout() {
               <template #title>物料</template>
             </el-menu-item>
           </el-sub-menu>
+          <el-sub-menu index="pr" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><List /></el-icon>
+              <span>采购请购</span>
+            </template>
+            <el-menu-item index="/pr">
+              <el-icon><List /></el-icon>
+              <template #title>请购单</template>
+            </el-menu-item>
+            <el-menu-item index="/pr/new">
+              <el-icon><EditPen /></el-icon>
+              <template #title>新建请购</template>
+            </el-menu-item>
+          </el-sub-menu>
           <el-sub-menu index="po" popper-class="zy-menu-popper">
             <template #title>
               <el-icon><Document /></el-icon>
@@ -101,6 +178,102 @@ function logout() {
               <el-icon><DataAnalysis /></el-icon>
               <template #title>执行报表</template>
             </el-menu-item>
+            <el-menu-item index="/purchase/reports/analytics">
+              <el-icon><DataAnalysis /></el-icon>
+              <template #title>分析报表</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu index="approval" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><Stamp /></el-icon>
+              <span>审批中心</span>
+            </template>
+            <el-menu-item index="/approval/list">
+              <el-icon><Tickets /></el-icon>
+              <template #title>审批工作台</template>
+            </el-menu-item>
+            <el-menu-item index="/approval/rules">
+              <el-icon><Stamp /></el-icon>
+              <template #title>审批规则</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu index="perf" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><Medal /></el-icon>
+              <span>供应商绩效</span>
+            </template>
+            <el-menu-item index="/perf/evaluations">
+              <el-icon><Medal /></el-icon>
+              <template #title>绩效考核</template>
+            </el-menu-item>
+            <el-menu-item index="/perf/evaluations/new">
+              <el-icon><EditPen /></el-icon>
+              <template #title>新建考核</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu index="invoice" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><Money /></el-icon>
+              <span>对账与发票</span>
+            </template>
+            <el-menu-item index="/invoice">
+              <el-icon><Money /></el-icon>
+              <template #title>发票管理</template>
+            </el-menu-item>
+            <el-menu-item index="/reconciliation">
+              <el-icon><Tickets /></el-icon>
+              <template #title>对账管理</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu index="sourcing" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><Sell /></el-icon>
+              <span>寻源与合同</span>
+            </template>
+            <el-menu-item index="/sourcing/rfq">
+              <el-icon><Document /></el-icon>
+              <template #title>询价单</template>
+            </el-menu-item>
+            <el-menu-item index="/sourcing/rfq/new">
+              <el-icon><EditPen /></el-icon>
+              <template #title>新建询价</template>
+            </el-menu-item>
+            <el-menu-item index="/sourcing/contracts">
+              <el-icon><Tickets /></el-icon>
+              <template #title>合同台账</template>
+            </el-menu-item>
+            <el-menu-item index="/sourcing/contracts/new">
+              <el-icon><Plus /></el-icon>
+              <template #title>新建合同</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu index="collab" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><ChatDotRound /></el-icon>
+              <span>协同</span>
+            </template>
+            <el-menu-item index="/notifications">
+              <el-icon><Bell /></el-icon>
+              <template #title>消息中心</template>
+            </el-menu-item>
+            <el-menu-item index="/quality">
+              <el-icon><Document /></el-icon>
+              <template #title>质量协同</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-sub-menu index="system" popper-class="zy-menu-popper">
+            <template #title>
+              <el-icon><User /></el-icon>
+              <span>系统管理</span>
+            </template>
+            <el-menu-item index="/system/users">
+              <el-icon><User /></el-icon>
+              <template #title>用户管理</template>
+            </el-menu-item>
+            <el-menu-item index="/system/audit-log">
+              <el-icon><Document /></el-icon>
+              <template #title>审计日志</template>
+            </el-menu-item>
           </el-sub-menu>
         </el-menu>
       </el-scrollbar>
@@ -123,6 +296,12 @@ function logout() {
           </el-breadcrumb>
         </div>
         <div class="zy-header-right">
+          <router-link to="/notifications" class="zy-bell-wrap" title="消息中心">
+            <el-badge :value="unreadNotifications" :hidden="unreadNotifications === 0" :max="99" class="zy-bell-badge">
+              <el-icon class="zy-bell-icon" :size="22"><Bell /></el-icon>
+            </el-badge>
+          </router-link>
+          <el-divider direction="vertical" class="zy-header-divider" />
           <el-dropdown trigger="click" @command="(c: string) => c === 'logout' && logout()">
             <span class="zy-user-trigger">
               <span class="zy-user-avatar">
@@ -336,6 +515,29 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.zy-header-divider {
+  margin: 0 4px;
+  height: 22px;
+}
+
+.zy-bell-wrap {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: #595959;
+  text-decoration: none;
+}
+
+.zy-bell-wrap:hover {
+  background: #f5f5f5;
+  color: var(--zy-menu-accent, #1677ff);
+}
+
+.zy-bell-badge :deep(.el-badge__content) {
+  transform: translate(8px, -4px);
 }
 
 .zy-user-trigger {
