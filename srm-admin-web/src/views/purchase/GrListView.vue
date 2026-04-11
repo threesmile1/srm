@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { executionApi, downloadArrayBuffer, type GrDetail, type GrSummary } from '../../api/execution'
@@ -10,6 +10,37 @@ const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
 usePersistedProcurementOrg(orgId, orgs, 'gr-list')
 const rows = ref<GrSummary[]>([])
+/**
+ * 已发货通知待收货：存在 ASN 发货通知行，且关联订单仍有未收清数量
+ * 尚未收清订单：无 ASN 关联行，但关联订单仍有未收清数量（如线下/无通知收货）
+ * 已收清订单：关联采购订单已全部收清（尚未收清数量 ≤ 0）
+ */
+const listTab = ref<'waitReceive' | 'poOpen' | 'poCleared'>('waitReceive')
+
+function openQtyOnPo(r: GrSummary): number {
+  const q = r.pendingReceiptQty
+  if (q == null || String(q).trim() === '') return 0
+  const n = parseFloat(String(q))
+  return Number.isFinite(n) ? n : 0
+}
+
+function hasAsn(r: GrSummary): boolean {
+  return r.hasAsnShipment === true
+}
+
+const displayRows = computed(() => {
+  const all = rows.value
+  switch (listTab.value) {
+    case 'waitReceive':
+      return all.filter((r) => openQtyOnPo(r) > 0 && hasAsn(r))
+    case 'poOpen':
+      return all.filter((r) => openQtyOnPo(r) > 0 && !hasAsn(r))
+    case 'poCleared':
+      return all.filter((r) => openQtyOnPo(r) <= 0)
+    default:
+      return all
+  }
+})
 const tableRef = ref()
 const drawer = ref(false)
 const detail = ref<GrDetail | null>(null)
@@ -73,7 +104,12 @@ async function exportSelected() {
       <el-button type="primary" @click="$router.push('/purchase/receipts/new')">新建收货</el-button>
       <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
-    <el-table ref="tableRef" :data="rows" stripe @row-dblclick="(row: GrSummary) => openDetail(row)">
+    <el-tabs v-model="listTab" class="list-tabs">
+      <el-tab-pane label="已发货通知待收货" name="waitReceive" />
+      <el-tab-pane label="尚未收清订单" name="poOpen" />
+      <el-tab-pane label="已收清订单" name="poCleared" />
+    </el-tabs>
+    <el-table ref="tableRef" :data="displayRows" stripe @row-dblclick="(row: GrSummary) => openDetail(row)">
       <template #empty>
         <DataTableEmpty />
       </template>
@@ -82,6 +118,7 @@ async function exportSelected() {
       <el-table-column prop="poNo" label="采购订单" width="160" />
       <el-table-column prop="warehouseCode" label="仓库" width="100" />
       <el-table-column prop="receiptDate" label="收货日期" width="120" />
+      <el-table-column prop="pendingReceiptQty" label="尚未收清数量" min-width="120" />
       <el-table-column prop="exportStatus" label="导出状态" width="110" />
       <el-table-column label="操作" width="100">
         <template #default="{ row }">
@@ -125,5 +162,11 @@ async function exportSelected() {
 .title {
   font-size: 18px;
   font-weight: 600;
+}
+.list-tabs {
+  margin-bottom: 8px;
+}
+.list-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
 }
 </style>

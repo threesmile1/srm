@@ -20,6 +20,15 @@ const importDialogVisible = ref(false)
 const importResult = ref<PoImportResult | null>(null)
 const importing = ref(false)
 
+const statusMap: Record<string, string> = {
+  DRAFT: '草稿',
+  PENDING_APPROVAL: '待审批',
+  APPROVED: '已审核',
+  RELEASED: '已发布',
+  CLOSED: '已关闭',
+  CANCELLED: '已取消',
+}
+
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
   if (!ledgers.data.length) return
@@ -102,7 +111,9 @@ async function handleImport(uploadFile: { raw: File }) {
       </template>
       <el-table-column type="selection" width="42" />
       <el-table-column prop="poNo" label="订单号" width="200" />
-      <el-table-column prop="status" label="状态" width="100" />
+      <el-table-column label="状态" width="100">
+        <template #default="{ row }">{{ statusMap[row.status] || row.status }}</template>
+      </el-table-column>
       <el-table-column prop="supplierCode" label="供应商" width="120" />
       <el-table-column prop="supplierName" label="供应商名称" />
       <el-table-column prop="currency" label="币种" width="80" />

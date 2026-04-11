@@ -45,6 +45,10 @@ export type GrSummary = {
   warehouseCode: string
   receiptDate: string
   exportStatus: string
+  /** 关联采购订单尚未收清数量（列表接口返回；详情可选） */
+  pendingReceiptQty?: string
+  /** 是否存在至少一行关联发货通知 ASN（列表接口返回） */
+  hasAsnShipment?: boolean
 }
 
 export type GrDetail = GrSummary & {

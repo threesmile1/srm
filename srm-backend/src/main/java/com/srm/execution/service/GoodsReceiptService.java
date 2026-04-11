@@ -2,10 +2,14 @@ package com.srm.execution.service;
 
 import com.srm.config.SrmProperties;
 import com.srm.execution.domain.AsnLine;
+import com.srm.execution.domain.AsnNotice;
 import com.srm.execution.domain.GoodsReceipt;
 import com.srm.execution.domain.GoodsReceiptLine;
 import com.srm.execution.repo.AsnLineRepository;
+import com.srm.execution.repo.AsnNoticeRepository;
+import com.srm.execution.repo.GoodsReceiptLineRepository;
 import com.srm.execution.repo.GoodsReceiptRepository;
+import com.srm.execution.web.GoodsReceiptSummaryResponse;
 import com.srm.foundation.domain.OrgUnitType;
 import com.srm.foundation.domain.Warehouse;
 import com.srm.foundation.repo.OrgUnitRepository;
@@ -25,8 +29,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -35,11 +43,13 @@ import java.util.stream.Collectors;
 public class GoodsReceiptService {
 
     private final GoodsReceiptRepository goodsReceiptRepository;
+    private final GoodsReceiptLineRepository goodsReceiptLineRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderLineRepository purchaseOrderLineRepository;
     private final WarehouseRepository warehouseRepository;
     private final OrgUnitRepository orgUnitRepository;
     private final AsnLineRepository asnLineRepository;
+    private final AsnNoticeRepository asnNoticeRepository;
     private final GrNumberAllocator grNumberAllocator;
     private final SrmProperties srmProperties;
     private final StaffNotificationService staffNotificationService;
@@ -47,6 +57,35 @@ public class GoodsReceiptService {
     @Transactional(readOnly = true)
     public List<GoodsReceipt> listByOrg(Long procurementOrgId) {
         return goodsReceiptRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId);
+    }
+
+    /**
+     * 列表汇总：含关联订单「待收货」数量（未收清数量之和）。
+     */
+    @Transactional(readOnly = true)
+    public List<GoodsReceiptSummaryResponse> listSummaryByOrg(Long procurementOrgId) {
+        List<GoodsReceipt> list = goodsReceiptRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId);
+        if (list.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> poIds = list.stream().map(g -> g.getPurchaseOrder().getId()).collect(Collectors.toSet());
+        Map<Long, BigDecimal> pendingByPo = new HashMap<>();
+        if (!poIds.isEmpty()) {
+            for (Object[] row : purchaseOrderLineRepository.sumPendingReceiptQtyByPurchaseOrderIds(poIds)) {
+                pendingByPo.put((Long) row[0], (BigDecimal) row[1]);
+            }
+        }
+        Set<Long> grIds = list.stream().map(GoodsReceipt::getId).collect(Collectors.toSet());
+        Set<Long> withAsn = new HashSet<>();
+        if (!grIds.isEmpty()) {
+            withAsn.addAll(goodsReceiptLineRepository.findGoodsReceiptIdsHavingAsnLine(grIds));
+        }
+        return list.stream()
+                .map(g -> GoodsReceiptSummaryResponse.from(
+                        g,
+                        pendingByPo.getOrDefault(g.getPurchaseOrder().getId(), BigDecimal.ZERO),
+                        withAsn.contains(g.getId())))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -162,5 +201,58 @@ public class GoodsReceiptService {
         return saved;
     }
 
+    /**
+     * 按采购订单补全历史收货行的 {@code asn_line_id}：与前端新建收货一致，对每条订单行取「发货通知 id 最大」的 ASN 行。
+     * 仅当该订单行存在 ASN 时写入；无 ASN 映射的行跳过。{@code overwriteExisting=true} 时对订单下所有收货行重算 ASN（仍仅在有映射时覆盖）。
+     */
+    @Transactional
+    public GrAsnBackfillResult backfillAsnLineIdsForPurchaseOrder(Long purchaseOrderId, boolean overwriteExisting) {
+        PurchaseOrder po = purchaseOrderRepository.findWithDetailsById(purchaseOrderId)
+                .orElseThrow(() -> new NotFoundException("采购订单不存在: " + purchaseOrderId));
+        Map<Long, AsnLine> polToAsn = bestAsnLinePerPurchaseOrderLine(po);
+        List<GoodsReceiptLine> lines = overwriteExisting
+                ? goodsReceiptLineRepository.findForPurchaseOrder(purchaseOrderId)
+                : goodsReceiptLineRepository.findForPurchaseOrderWithNullAsnLine(purchaseOrderId);
+        int updated = 0;
+        int skippedNoAsn = 0;
+        for (GoodsReceiptLine gl : lines) {
+            Long polId = gl.getPurchaseOrderLine().getId();
+            AsnLine al = polToAsn.get(polId);
+            if (al == null) {
+                skippedNoAsn++;
+                continue;
+            }
+            gl.setAsnLine(al);
+            updated++;
+        }
+        if (updated > 0) {
+            goodsReceiptLineRepository.saveAll(lines);
+        }
+        return new GrAsnBackfillResult(po.getId(), po.getPoNo(), lines.size(), updated, skippedNoAsn, overwriteExisting);
+    }
+
+    /**
+     * 发货通知按 id 降序遍历，每条订单行首次出现的 ASN 行即为「最新通知」对应行（与 GrCreateView 一致）。
+     */
+    private Map<Long, AsnLine> bestAsnLinePerPurchaseOrderLine(PurchaseOrder po) {
+        List<AsnNotice> notices = asnNoticeRepository.findByPurchaseOrderOrderByIdDesc(po);
+        Map<Long, AsnLine> map = new LinkedHashMap<>();
+        for (AsnNotice n : notices) {
+            for (AsnLine line : n.getLines()) {
+                map.putIfAbsent(line.getPurchaseOrderLine().getId(), line);
+            }
+        }
+        return map;
+    }
+
     public record GrLineInput(Long purchaseOrderLineId, BigDecimal receivedQty, Long asnLineId) {}
+
+    public record GrAsnBackfillResult(
+            long purchaseOrderId,
+            String poNo,
+            int receiptLinesConsidered,
+            int linesUpdated,
+            int linesSkippedNoAsnMapping,
+            boolean overwriteExisting
+    ) {}
 }

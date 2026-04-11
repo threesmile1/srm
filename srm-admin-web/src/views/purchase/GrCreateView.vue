@@ -21,6 +21,8 @@ const receiptDate = ref(new Date().toISOString().slice(0, 10))
 const remark = ref('')
 /** lineId -> received qty string */
 const recvByLine = ref<Record<number, string>>({})
+/** 采购订单行 id -> 发货通知 ASN 行 id（同订单多份通知时取通知 id 较大者） */
+const polToAsnLineId = ref<Map<number, number>>(new Map())
 
 const qOrg = computed(() => {
   const v = route.query.procurementOrgId
@@ -72,9 +74,34 @@ async function loadWh() {
   if (r.data.length) warehouseId.value = r.data[0].id
 }
 
+async function loadPolToAsnMapping() {
+  polToAsnLineId.value = new Map()
+  if (purchaseOrderId.value == null) return
+  try {
+    const r = await executionApi.listAsn(purchaseOrderId.value)
+    const notices = r.data
+    const best = new Map<number, { noticeId: number; asnLineId: number }>()
+    for (const n of notices) {
+      for (const line of n.lines) {
+        const pid = line.purchaseOrderLineId
+        const cur = best.get(pid)
+        if (!cur || n.id > cur.noticeId) {
+          best.set(pid, { noticeId: n.id, asnLineId: line.id })
+        }
+      }
+    }
+    const m = new Map<number, number>()
+    best.forEach((v, k) => m.set(k, v.asnLineId))
+    polToAsnLineId.value = m
+  } catch {
+    polToAsnLineId.value = new Map()
+  }
+}
+
 async function loadPoDetail() {
   poDetail.value = null
   recvByLine.value = {}
+  polToAsnLineId.value = new Map()
   if (purchaseOrderId.value == null) return
   const r = await purchaseApi.get(purchaseOrderId.value)
   poDetail.value = r.data
@@ -82,6 +109,7 @@ async function loadPoDetail() {
     const maxOpen = Math.max(0, Number(l.qty) - Number(l.receivedQty || 0))
     recvByLine.value[l.id] = maxOpen > 0 ? String(maxOpen) : '0'
   }
+  await loadPolToAsnMapping()
 }
 
 watch(procurementOrgId, async (v) => {
@@ -113,7 +141,7 @@ async function submit() {
       .map((l) => ({
         purchaseOrderLineId: l.id,
         receivedQty: Number(recvByLine.value[l.id] || 0),
-        asnLineId: null as number | null,
+        asnLineId: polToAsnLineId.value.get(l.id) ?? null,
       }))
       .filter((x) => x.receivedQty > 0)
     if (!lines.length) {
@@ -170,10 +198,20 @@ async function submit() {
       </el-form-item>
     </el-form>
 
+    <p v-if="poDetail && polToAsnLineId.size > 0" class="asn-hint">
+      已根据发货通知自动匹配 ASN 行；提交后收货单将出现在「已发货通知待收货」页签（订单仍有未收清时）。
+    </p>
+
     <el-table v-if="poDetail" :data="poDetail.lines" stripe style="margin-top: 8px; max-width: 900px">
       <el-table-column prop="lineNo" label="行" width="50" />
       <el-table-column prop="materialCode" label="物料" width="110" />
       <el-table-column prop="materialName" label="名称" />
+      <el-table-column label="发货通知" width="100">
+        <template #default="{ row }">
+          <span v-if="polToAsnLineId.has(row.id)" class="asn-ok">已匹配</span>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="qty" label="订购" width="80" />
       <el-table-column prop="receivedQty" label="已收" width="80" />
       <el-table-column label="本次收货" width="130">
@@ -200,5 +238,15 @@ async function submit() {
 .title {
   font-size: 18px;
   font-weight: 600;
+}
+.asn-hint {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin: 0 0 8px;
+  max-width: 900px;
+  line-height: 1.5;
+}
+.asn-ok {
+  color: var(--el-color-success);
 }
 </style>
