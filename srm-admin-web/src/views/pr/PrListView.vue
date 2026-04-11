@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { prApi, type PrSummary } from '../../api/pr'
@@ -26,8 +26,11 @@ async function loadOrgs() {
 }
 
 async function loadData() {
-  if (orgId.value == null) return
-  rows.value = (await prApi.list(orgId.value)).data
+  const raw = orgId.value
+  if (raw == null) return
+  const id = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(id)) return
+  rows.value = (await prApi.list(id)).data
 }
 
 /** orgId 由 usePersistedProcurementOrg 在 orgs 加载后恢复；须等 orgId 就绪再拉列表，否则会按 null 提前 return */
@@ -35,6 +38,8 @@ watch(orgId, () => loadData(), { immediate: true })
 
 onMounted(async () => {
   await loadOrgs()
+  await nextTick()
+  await loadData()
 })
 
 function goDetail(id: number) { router.push(`/pr/${id}`) }
