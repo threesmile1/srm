@@ -15,18 +15,19 @@ import lombok.Setter;
 public class U9MaterialYiguiRow {
 
     @JsonProperty("liaohao")
-    @JsonAlias({"料号", "LIAOHAO", "item_code", "code"})
+    @JsonAlias({"料号", "LIAOHAO", "item_code", "code", "物料编码", "ItemCode", "itemCode", "ITEM_CODE",
+            "material_code", "MaterialCode"})
     private String liaohao;
 
     @JsonProperty("cangku_suzhou")
-    @JsonAlias({"苏州仓库", "suzhou", "cangkuSuzhou"})
+    @JsonAlias({"苏州仓库", "苏州仓", "仓库苏州", "仓库_苏州", "suzhou", "cangkuSuzhou"})
     private String cangkuSuzhou;
 
     @JsonProperty("cangku_chengdu")
-    @JsonAlias({"成都仓库", "chengdu", "cangkuChengdu"})
+    @JsonAlias({"成都仓库", "成都仓", "仓库成都", "仓库_成都", "chengdu", "cangkuChengdu"})
     private String cangkuChengdu;
 
     @JsonProperty("cangku_huanan")
-    @JsonAlias({"华南仓库", "huanan", "cangkuHuanan"})
+    @JsonAlias({"华南仓库", "华南仓", "仓库华南", "仓库_华南", "huanan", "cangkuHuanan"})
     private String cangkuHuanan;
 }

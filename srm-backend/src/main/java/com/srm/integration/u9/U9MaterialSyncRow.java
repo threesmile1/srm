@@ -34,10 +34,13 @@ public class U9MaterialSyncRow {
     @JsonAlias({"warehouseName", "仓库名称", "仓库", "warehouse", "WhName"})
     private String warehouseName;
 
-    @JsonAlias({"supplierCode", "供应商编码", "vendorCode", "lpgys"})
+    @JsonAlias({"supplierCode", "供应商编码", "供应商代码", "gysbm", "GYSBM", "vendorCode", "vendor_code",
+            "VENDOR_CODE", "supplier_code", "lpgys", "默认供应商编码", "gys", "供应商", "主供应商编码", "首选供应商编码"})
     private String supplierCode;
 
-    @JsonAlias({"supplierName", "gongyingshang", "供应商名称", "供应商", "vendorName"})
+    /** 勿使用过于宽泛的「供应商」别名，避免与编码列重名时绑错到名称 */
+    @JsonAlias({"supplierName", "gongyingshang", "供应商名称", "供应商简称", "vendorName", "vendor_name",
+            "gysmc", "gongyingshangmingcheng"})
     private String supplierName;
 
     /** 帆软：jijiadanwei=计价单位 */

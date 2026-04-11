@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.srm.config.SrmProperties;
 import com.srm.web.error.BadRequestException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -23,6 +24,7 @@ import java.util.Map;
  * 帆软 Decision POST /webroot/decision/url/api/data（与 wuliao / lpgys / cangku 共用）。
  */
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class U9DecisionClient {
 
@@ -68,9 +70,12 @@ public class U9DecisionClient {
             String hint = errPayload != null && !errPayload.isBlank()
                     ? truncateForMessage(errPayload, 800)
                     : "";
+            log.warn("帆软 Decision HTTP {} report_path={} bodySnippet={}",
+                    e.getStatusCode().value(), reportPath, hint);
             throw new BadRequestException("帆软 Decision HTTP " + e.getStatusCode().value()
                     + (hint.isEmpty() ? ": " + e.getMessage() : "，响应: " + hint));
         } catch (RestClientException e) {
+            log.warn("帆软 Decision 网络失败 report_path={}: {}", reportPath, e.getMessage());
             throw new BadRequestException("帆软 Decision 接口请求失败: " + e.getMessage());
         }
     }

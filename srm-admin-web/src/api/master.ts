@@ -1,7 +1,10 @@
 import { api } from './http'
 
-/** 帆软/U9 取数可能超过 30s，与后端 srm.u9.http-read-timeout-ms 对齐 */
-const U9_SYNC_TIMEOUT_MS = 180_000
+/** 帆软/U9 全量或四厂报表可能很慢，与后端 srm.u9.http-read-timeout-ms 默认对齐（10 分钟） */
+const U9_SYNC_TIMEOUT_MS = 600_000
+
+/** 按料号逐次调帆软，全量物料时总耗时长；0 表示 Axios 不限制单次请求超时 */
+const FACTORY_WAREHOUSE_SYNC_TIMEOUT_MS = 0
 
 export type Supplier = {
   id: number
@@ -93,6 +96,13 @@ export type FactoryWarehouseSyncResult = {
   errors: string[]
 }
 
+/** 批量 lpgys（全部物料或指定编码列表） */
+export type U9LpgysBulkSyncResult = {
+  materialsTried: number
+  supplierLinksUpserted: number
+  errors: string[]
+}
+
 export const masterApi = {
   listSuppliers: () => api.get<Supplier[]>('/api/v1/master/suppliers'),
   createSupplier: (body: {
@@ -142,12 +152,20 @@ export const masterApi = {
   getU9SyncJob: (jobId: string) =>
     api.get<U9SyncJobStatus>(`/api/v1/master/materials/sync-from-u9/jobs/${jobId}`, { timeout: 15000 }),
 
-  /** cangku_yigui + cangku_shuiqi → 物料四厂默认仓 */
-  syncFactoryWarehousesFromU9: () =>
+  /** 每料号传 code 调 cangku_yigui / cangku_shuiqi；不传 body 则同步本地全部物料 */
+  syncFactoryWarehousesFromU9: (materialCodes?: string[]) =>
     api.post<FactoryWarehouseSyncResult>(
       '/api/v1/master/materials/sync-factory-warehouses-from-u9',
-      undefined,
-      { timeout: U9_SYNC_TIMEOUT_MS },
+      materialCodes !== undefined && materialCodes.length > 0 ? materialCodes : undefined,
+      { timeout: FACTORY_WAREHOUSE_SYNC_TIMEOUT_MS },
+    ),
+
+  /** 批量 lpgys；不传 body 则本地全部物料 */
+  syncSuppliersFromLpgysBulk: (materialCodes?: string[]) =>
+    api.post<U9LpgysBulkSyncResult>(
+      '/api/v1/master/materials/sync-suppliers-from-u9',
+      materialCodes !== undefined && materialCodes.length > 0 ? materialCodes : undefined,
+      { timeout: FACTORY_WAREHOUSE_SYNC_TIMEOUT_MS },
     ),
 
   listWarehouses: (params: { page: number; size: number }) =>

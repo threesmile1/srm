@@ -42,13 +42,19 @@ public class U9MaterialRowWriter {
     private void fillFromRow(MaterialItem m, String name, String uom, U9MaterialSyncRow row) {
         m.setName(name);
         m.setUom(uom);
-        if (StringUtils.hasText(row.getU9ItemCode())) {
-            m.setU9ItemCode(row.getU9ItemCode().trim());
+        // 与物料编码一致，便于帆软等按单参数 code 与本地主数据对齐
+        if (StringUtils.hasText(m.getCode())) {
+            m.setU9ItemCode(m.getCode().trim());
         }
         m.setSpecification(trimToNull(row.getSpecification()));
         m.setPurchaseUnitPrice(row.getPurchaseUnitPrice());
-        m.setU9SupplierCode(trimToNull(row.getSupplierCode()));
-        m.setU9SupplierName(trimToNull(row.getSupplierName()));
+        // wuliao 常不带供应商列：勿用 null 覆盖已有快照（含 lpgys 多供写入后的首供）
+        if (StringUtils.hasText(row.getSupplierCode())) {
+            m.setU9SupplierCode(row.getSupplierCode().trim());
+        }
+        if (StringUtils.hasText(row.getSupplierName())) {
+            m.setU9SupplierName(trimToNull(row.getSupplierName()));
+        }
     }
 
     private static String trimToNull(String s) {

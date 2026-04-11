@@ -7,6 +7,7 @@ import {
   type Material,
   type U9MaterialSyncResult,
   type FactoryWarehouseSyncResult,
+  type U9LpgysBulkSyncResult,
 } from '../../api/master'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
@@ -27,6 +28,9 @@ const u9SyncDialogVisible = ref(false)
 const factoryWhSyncing = ref(false)
 const factoryWhResult = ref<FactoryWarehouseSyncResult | null>(null)
 const factoryWhDialogVisible = ref(false)
+const lpgysBulkSyncing = ref(false)
+const lpgysBulkResult = ref<U9LpgysBulkSyncResult | null>(null)
+const lpgysBulkDialogVisible = ref(false)
 
 async function load() {
   try {
@@ -144,21 +148,30 @@ async function syncFromU9() {
   }
 }
 
-/** 帆软 cangku_yigui / cangku_shuiqi → 四厂默认存储仓库 */
+/** 帆软 cangku_yigui / cangku_shuiqi → 四厂默认存储仓库（始终本地全部物料） */
 async function syncFactoryWarehousesFromU9() {
   factoryWhSyncing.value = true
   factoryWhResult.value = null
   try {
-    const r = await masterApi.syncFactoryWarehousesFromU9()
+    const r = await masterApi.syncFactoryWarehousesFromU9(undefined)
     factoryWhResult.value = r.data
     factoryWhDialogVisible.value = true
-    const errN = r.data.errors.length
-    if (errN === 0) {
+    const d = r.data
+    const errN = d.errors.length
+    const wrote = d.yiguiUpdated + d.shuiqiUpdated
+    const rows = d.yiguiRows + d.shuiqiRows
+    if (rows === 0) {
+      ElMessage.warning('无物料可同步（本地物料表为空）')
+    } else if (wrote === 0) {
+      ElMessage.warning(
+        '未从帆软取到仓数据（每料号应返回至少一行）；请检查报表与 parameters.code；详情见弹窗',
+      )
+    } else if (errN === 0) {
       ElMessage.success(
-        `四厂仓库已同步：衣柜表 ${r.data.yiguiUpdated}/${r.data.yiguiRows}，水漆 ${r.data.shuiqiUpdated}/${r.data.shuiqiRows}`,
+        `四厂仓库已同步：衣柜表 ${d.yiguiUpdated}/${d.yiguiRows}，水漆 ${d.shuiqiUpdated}/${d.shuiqiRows}`,
       )
     } else {
-      ElMessage.warning(`已写入，另有 ${errN} 条提示（如无此料号等），请查看详情`)
+      ElMessage.warning(`已写入 ${wrote} 条，另有 ${errN} 条提示，请查看详情`)
     }
     await load()
   } catch (e: unknown) {
@@ -174,6 +187,43 @@ async function syncFactoryWarehousesFromU9() {
   }
 }
 
+/** 工具栏：帆软 lpgys，本地全部物料 */
+async function syncLpgysBulkFromU9() {
+  lpgysBulkSyncing.value = true
+  lpgysBulkResult.value = null
+  try {
+    const r = await masterApi.syncSuppliersFromLpgysBulk(undefined)
+    lpgysBulkResult.value = r.data
+    lpgysBulkDialogVisible.value = true
+    const d = r.data
+    const errN = d.errors.length
+    if (d.materialsTried === 0) {
+      ElMessage.warning('无物料可同步（本地物料表为空）')
+    } else if (d.supplierLinksUpserted === 0 && errN === 0) {
+      ElMessage.warning('未写入供应商关系（报表无有效编码等）')
+    } else if (errN === 0) {
+      ElMessage.success(
+        `供应商已同步：请求 ${d.materialsTried} 个料号，写入 ${d.supplierLinksUpserted} 条关系`,
+      )
+    } else {
+      ElMessage.warning(
+        `已处理 ${d.materialsTried} 个料号，写入 ${d.supplierLinksUpserted} 条关系，另有 ${errN} 条提示`,
+      )
+    }
+    await load()
+  } catch (e: unknown) {
+    let msg = ''
+    if (axios.isAxiosError(e)) {
+      msg = (e.response?.data as { error?: string } | undefined)?.error ?? e.message
+    } else if (e && typeof e === 'object' && 'message' in e) {
+      msg = String((e as { message: string }).message)
+    }
+    ElMessage.error(msg || '同步供应商失败')
+  } finally {
+    lpgysBulkSyncing.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -181,14 +231,34 @@ onMounted(load)
   <div class="page">
     <div class="toolbar">
       <span class="title">物料</span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="toolbar-actions">
         <el-button :loading="u9Syncing" @click="syncFromU9">从 U9 同步（后台分页）</el-button>
-        <el-button :loading="factoryWhSyncing" @click="syncFactoryWarehousesFromU9"
-          >同步四厂仓库（yigui / shuiqi）</el-button
-        >
+        <div class="factory-wh-bar">
+          <el-button
+            :loading="factoryWhSyncing"
+            :disabled="lpgysBulkSyncing"
+            @click="syncFactoryWarehousesFromU9"
+          >
+            同步四厂仓库（yigui / shuiqi）
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="lpgysBulkSyncing"
+            :disabled="factoryWhSyncing"
+            @click="syncLpgysBulkFromU9"
+          >
+            同步供应商（lpgys）
+          </el-button>
+        </div>
       </div>
     </div>
     <p class="hint">物料仅能通过 U9 同步写入系统，不支持新建或 Excel 导入。</p>
+    <p class="hint">
+      「同步四厂仓库」「同步供应商（lpgys）」均按本地全部物料逐料号请求帆软，全量耗时会较长。
+    </p>
+    <p class="hint">
+      「从 U9 同步」仅拉取物料主数据（wuliao），不再自动跟跑供应商。供应商请用「同步供应商（lpgys）」；需配置 decision-api-url 与 supplier-report-path。
+    </p>
     <el-table :data="rows" stripe>
       <template #empty>
         <DataTableEmpty />
@@ -205,7 +275,7 @@ onMounted(load)
       <el-table-column prop="u9SupplierName" label="供应商" min-width="120" show-overflow-tooltip />
       <el-table-column prop="u9SupplierCode" label="供应商编码" width="110" show-overflow-tooltip />
       <el-table-column prop="u9ItemCode" label="U9 料号" width="110" />
-      <el-table-column label="操作" width="100">
+      <el-table-column label="操作" width="88" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
         </template>
@@ -249,17 +319,34 @@ onMounted(load)
     <el-dialog v-model="factoryWhDialogVisible" title="四厂仓库同步结果" width="560px">
       <div v-if="factoryWhResult" class="import-result">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="衣柜报表行数">{{ factoryWhResult.yiguiRows }}</el-descriptions-item>
-          <el-descriptions-item label="衣柜已更新">{{ factoryWhResult.yiguiUpdated }}</el-descriptions-item>
-          <el-descriptions-item label="衣柜跳过">{{ factoryWhResult.yiguiSkipped }}</el-descriptions-item>
-          <el-descriptions-item label="水漆报表行数">{{ factoryWhResult.shuiqiRows }}</el-descriptions-item>
-          <el-descriptions-item label="水漆已更新">{{ factoryWhResult.shuiqiUpdated }}</el-descriptions-item>
-          <el-descriptions-item label="水漆跳过">{{ factoryWhResult.shuiqiSkipped }}</el-descriptions-item>
+          <el-descriptions-item label="衣柜请求次数">{{ factoryWhResult.yiguiRows }}</el-descriptions-item>
+          <el-descriptions-item label="衣柜有数据">{{ factoryWhResult.yiguiUpdated }}</el-descriptions-item>
+          <el-descriptions-item label="衣柜空/失败">{{ factoryWhResult.yiguiSkipped }}</el-descriptions-item>
+          <el-descriptions-item label="水漆请求次数">{{ factoryWhResult.shuiqiRows }}</el-descriptions-item>
+          <el-descriptions-item label="水漆有数据">{{ factoryWhResult.shuiqiUpdated }}</el-descriptions-item>
+          <el-descriptions-item label="水漆空/失败">{{ factoryWhResult.shuiqiSkipped }}</el-descriptions-item>
         </el-descriptions>
         <div v-if="factoryWhResult.errors.length" class="import-errors">
           <p style="font-weight:600;color:var(--el-color-warning);margin:12px 0 4px">提示：</p>
           <ul>
             <li v-for="(err, i) in factoryWhResult.errors" :key="i">{{ err }}</li>
+          </ul>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="lpgysBulkDialogVisible" title="供应商（lpgys）同步结果" width="560px">
+      <div v-if="lpgysBulkResult" class="import-result">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="料号请求数">{{ lpgysBulkResult.materialsTried }}</el-descriptions-item>
+          <el-descriptions-item label="关系写入数">{{
+            lpgysBulkResult.supplierLinksUpserted
+          }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="lpgysBulkResult.errors.length" class="import-errors">
+          <p style="font-weight:600;color:var(--el-color-warning);margin:12px 0 4px">提示：</p>
+          <ul>
+            <li v-for="(err, i) in lpgysBulkResult.errors" :key="i">{{ err }}</li>
           </ul>
         </div>
       </div>
@@ -272,12 +359,6 @@ onMounted(load)
           <el-descriptions-item label="新增">{{ u9SyncResult.created }}</el-descriptions-item>
           <el-descriptions-item label="更新">{{ u9SyncResult.updated }}</el-descriptions-item>
           <el-descriptions-item label="跳过">{{ u9SyncResult.skipped }}</el-descriptions-item>
-          <el-descriptions-item label="lpgys 料号请求">{{
-            u9SyncResult.lpgysMaterialsTried ?? 0
-          }}</el-descriptions-item>
-          <el-descriptions-item label="供应商行写入">{{
-            u9SyncResult.lpgysSupplierLinksUpserted ?? 0
-          }}</el-descriptions-item>
         </el-descriptions>
         <div v-if="u9SyncResult.errors.length" class="import-errors">
           <p style="font-weight:600;color:var(--el-color-warning);margin:12px 0 4px">行级提示：</p>
@@ -296,9 +377,23 @@ onMounted(load)
 }
 .toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 8px;
+  gap: 12px;
+}
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.factory-wh-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 .title {
   font-size: 18px;

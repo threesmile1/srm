@@ -121,11 +121,31 @@ public class MasterDataController {
     }
 
     /**
-     * 从帆软 cangku_yigui / cangku_shuiqi 同步各厂默认存储仓库（按物料编码匹配本地 material_item）。
+     * 从帆软 cangku_yigui / cangku_shuiqi 按料号拉取各厂默认仓（每料号传 parameters.code，见 srm.u9.factory-warehouse-report-parameter-name）。
+     * 请求体为物料编码列表时只同步这些编码；省略或空数组表示本地全部物料。
      */
     @PostMapping("/materials/sync-factory-warehouses-from-u9")
-    public U9MaterialFactoryWarehouseSyncService.FactoryWarehouseSyncResult syncFactoryWarehousesFromU9() {
-        return u9MaterialFactoryWarehouseSyncService.syncFromU9();
+    public U9MaterialFactoryWarehouseSyncService.FactoryWarehouseSyncResult syncFactoryWarehousesFromU9(
+            @RequestBody(required = false) List<String> materialCodes) {
+        return u9MaterialFactoryWarehouseSyncService.syncFromU9(materialCodes);
+    }
+
+    /**
+     * 批量 lpgys：请求体为物料编码列表时只同步这些料号；省略或空数组表示本地全部物料。
+     */
+    @PostMapping("/materials/sync-suppliers-from-u9")
+    public U9MaterialSyncService.U9LpgysBulkSyncResult syncSuppliersFromLpgysBulk(
+            @RequestBody(required = false) List<String> materialCodes) {
+        return u9MaterialSyncService.syncSuppliersFromLpgys(materialCodes);
+    }
+
+    /**
+     * 仅对一条物料调用帆软 lpgys，写入 material_supplier_u9 与物料表首供快照（不跑 wuliao 全量）。
+     */
+    @PostMapping("/materials/{materialId}/sync-suppliers-from-u9")
+    public U9MaterialSyncService.U9LpgysSingleSyncResult syncSuppliersFromU9ForMaterial(
+            @PathVariable Long materialId) {
+        return u9MaterialSyncService.syncSuppliersFromLpgysForMaterialId(materialId);
     }
 
     /**

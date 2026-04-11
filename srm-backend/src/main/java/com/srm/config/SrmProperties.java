@@ -82,8 +82,7 @@ public class SrmProperties {
         private String supplierReportPath = "API/lpgys.cpt";
 
         /**
-         * 在 wuliao 物料落库完成后，是否按每条物料编码调用 lpgys 拉取供应商并写入 material_supplier_u9。
-         * 关闭则仅同步物料主数据。
+         * 已废弃：供应商请使用「同步供应商」接口单独拉 lpgys，不再随全量物料同步跟跑。保留字段仅为兼容旧配置。
          */
         private boolean syncSuppliersFromLpgys = false;
 
@@ -99,7 +98,13 @@ public class SrmProperties {
         private String materialShuiqiReportPath = "API/cangku_shuiqi.cpt";
 
         /**
-         * 上述两报表的帆软 parameters；空则默认一条 name=liaohao、value 空串（全量）。
+         * 四厂仓报表按「单料号」拉取时，帆软参数名（与模板中参数一致），默认 {@code code}。
+         */
+        private String factoryWarehouseReportParameterName = "code";
+
+        /**
+         * 四厂仓帆软 parameters 模板；非空时按条使用，且每条参数的 value 若为空则注入当前物料编码。
+         * 空则使用单条：name 为 factoryWarehouseReportParameterName（默认 code）、value 为物料编码。
          */
         private List<FineReportParameter> materialFactoryWarehouseParameters = new ArrayList<>();
 
@@ -110,10 +115,10 @@ public class SrmProperties {
         private int httpConnectTimeoutMs = 15_000;
 
         /**
-         * 读取帆软/U9 响应超时（毫秒）。报表取数可能较慢，默认 3 分钟；
-         * 仍超时可改为 300000（5 分钟）或更大。
+         * 读取帆软/U9 响应超时（毫秒）。大报表可能超过 3 分钟，默认 10 分钟；
+         * 仍超可在 application-local.yml 设置 srm.u9.http-read-timeout-ms。
          */
-        private int httpReadTimeoutMs = 180_000;
+        private int httpReadTimeoutMs = 600_000;
     }
 
     @Getter

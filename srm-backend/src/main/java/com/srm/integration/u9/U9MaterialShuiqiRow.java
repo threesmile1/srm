@@ -15,10 +15,11 @@ import lombok.Setter;
 public class U9MaterialShuiqiRow {
 
     @JsonProperty("liaohao")
-    @JsonAlias({"料号", "LIAOHAO", "item_code", "code"})
+    @JsonAlias({"料号", "LIAOHAO", "item_code", "code", "物料编码", "ItemCode", "itemCode", "ITEM_CODE",
+            "material_code", "MaterialCode"})
     private String liaohao;
 
     @JsonProperty("cangku_shuiqi")
-    @JsonAlias({"水漆仓库", "shuiqi", "warehouse_shuiqi", "cangkuShuiqi"})
+    @JsonAlias({"水漆仓库", "水漆仓", "仓库水漆", "shuiqi", "warehouse_shuiqi", "cangkuShuiqi"})
     private String cangkuShuiqi;
 }
