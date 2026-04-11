@@ -4,14 +4,20 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
 import { foundationApi, type OrgUnit, type Warehouse } from '../../api/foundation'
-import { masterApi, type Material, type Supplier } from '../../api/master'
+import { masterApi, type Supplier } from '../../api/master'
 import { prApi } from '../../api/pr'
+import { useMaterialRemoteSelect } from '../../composables/useMaterialRemoteSelect'
 
 const router = useRouter()
 const orgs = ref<OrgUnit[]>([])
 const warehouses = ref<Warehouse[]>([])
-const materials = ref<Material[]>([])
 const suppliers = ref<Supplier[]>([])
+const {
+  materialOptions,
+  materialLoading,
+  remoteSearch: remoteSearchMaterials,
+  prefetchInitial: prefetchMaterials,
+} = useMaterialRemoteSelect()
 
 const form = ref({
   procurementOrgId: null as number | null,
@@ -44,8 +50,8 @@ async function loadWarehouses() {
 onMounted(async () => {
   await loadOrgs()
   await loadWarehouses()
-  materials.value = (await masterApi.listAllMaterialsForSelect()).data
-  suppliers.value = (await masterApi.listSuppliers()).data
+  const [s] = await Promise.all([masterApi.listSuppliers(), prefetchMaterials()])
+  suppliers.value = s.data
 })
 
 function addLine() {
@@ -115,8 +121,17 @@ async function save() {
     <el-table :data="lines" border size="small">
       <el-table-column label="物料" min-width="180">
         <template #default="{ row }">
-          <el-select v-model="row.materialId" filterable placeholder="选择物料" style="width: 100%">
-            <el-option v-for="m in materials" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
+          <el-select
+            v-model="row.materialId"
+            filterable
+            remote
+            reserve-keyword
+            placeholder="输入编码或名称搜索"
+            :remote-method="remoteSearchMaterials"
+            :loading="materialLoading"
+            style="width: 100%"
+          >
+            <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
           </el-select>
         </template>
       </el-table-column>

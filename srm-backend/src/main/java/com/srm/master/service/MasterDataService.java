@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -31,38 +32,16 @@ public class MasterDataService {
     private final SupplierRepository supplierRepository;
     private final MaterialItemRepository materialItemRepository;
     private final OrgUnitRepository orgUnitRepository;
-    private final MaterialDerivedMasterService materialDerivedMasterService;
 
     /**
-     * 下单/下拉用：仅包含物料中出现的 U9 供应商；缺失时在 supplier 表按编码自动建档并授权全部采购组织。
+     * 下单/下拉用：直接读 supplier 主档（由 U9/lpgys 同步物料时 {@link #upsertSupplierMasterForU9} 维护）。
+     * 勿在 GET 上全量聚合物料供应商并逐条 upsert，否则新建请购等页面会长时间卡死。
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public List<Supplier> listSuppliers() {
-        List<MaterialDerivedMasterService.MaterialSupplierRefRow> refs =
-                materialDerivedMasterService.listAllMaterialSupplierRefs();
-        if (refs.isEmpty()) {
-            return List.of();
-        }
-        List<OrgUnit> procOrgs = orgUnitRepository.findByOrgType(OrgUnitType.PROCUREMENT);
-        Set<Long> allProcIds = procOrgs.stream().map(OrgUnit::getId).collect(Collectors.toCollection(HashSet::new));
-        if (allProcIds.isEmpty()) {
-            return List.of();
-        }
-        for (MaterialDerivedMasterService.MaterialSupplierRefRow ref : refs) {
-            if (ref == null || !StringUtils.hasText(ref.u9SupplierCode())) {
-                continue;
-            }
-            upsertSupplierMasterForU9(ref.u9SupplierCode().trim(), ref.u9SupplierName(), allProcIds);
-        }
-        Set<String> allowed = refs.stream()
-                .filter(r -> r != null && StringUtils.hasText(r.u9SupplierCode()))
-                .map(r -> r.u9SupplierCode().trim())
-                .collect(Collectors.toSet());
-        List<Supplier> out = new ArrayList<>();
-        for (String code : allowed.stream().sorted().toList()) {
-            supplierRepository.findByCode(code).ifPresent(out::add);
-        }
-        return out;
+        return supplierRepository.findAll().stream()
+                .sorted(Comparator.comparing(Supplier::getCode, Comparator.nullsLast(String::compareTo)))
+                .toList();
     }
 
     /**
@@ -161,7 +140,14 @@ public class MasterDataService {
     }
 
     @Transactional(readOnly = true)
-    public Page<MaterialItem> pageMaterials(Pageable pageable) {
+    public Page<MaterialItem> pageMaterials(Pageable pageable, String q) {
+        if (StringUtils.hasText(q)) {
+            String trimmed = q.trim();
+            if (trimmed.length() > 100) {
+                trimmed = trimmed.substring(0, 100);
+            }
+            return materialItemRepository.searchByCodeOrName(trimmed, pageable);
+        }
         return materialItemRepository.findAll(pageable);
     }
 

@@ -154,10 +154,11 @@ public class MasterDataController {
     @GetMapping("/materials")
     public Page<MaterialResponse> listMaterials(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String q) {
         int ps = normalizeMaterialPageSize(size);
         return masterDataService
-                .pageMaterials(PageRequest.of(Math.max(0, page), ps, Sort.by("code").ascending()))
+                .pageMaterials(PageRequest.of(Math.max(0, page), ps, Sort.by("code").ascending()), q)
                 .map(MaterialResponse::from);
     }
 

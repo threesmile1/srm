@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
-import { masterApi, type Material, type Supplier } from '../../api/master'
+import { masterApi, type Supplier } from '../../api/master'
+import { useMaterialRemoteSelect } from '../../composables/useMaterialRemoteSelect'
 import { rfqApi } from '../../api/rfq'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
 
@@ -12,8 +13,14 @@ const orgs = ref<OrgUnit[]>([])
 const procurementOrgId = ref<number | null>(null)
 usePersistedProcurementOrg(procurementOrgId, orgs, 'rfq-list')
 
-const materials = ref<Material[]>([])
 const suppliers = ref<Supplier[]>([])
+const {
+  materialOptions,
+  materialLoading,
+  remoteSearch: remoteSearchMaterials,
+  prefetchInitial: prefetchMaterials,
+  getMaterial,
+} = useMaterialRemoteSelect()
 const title = ref('')
 const deadline = ref<string | null>(null)
 const remark = ref('')
@@ -30,8 +37,7 @@ async function loadOrgs() {
 }
 
 async function loadMaster() {
-  const [m, s] = await Promise.all([masterApi.listAllMaterialsForSelect(), masterApi.listSuppliers()])
-  materials.value = m.data
+  const [s] = await Promise.all([masterApi.listSuppliers(), prefetchMaterials()])
   suppliers.value = s.data
 }
 
@@ -45,7 +51,7 @@ function removeLine(i: number) {
 
 function onMatChange(row: (typeof lines.value)[0], id: unknown) {
   const mid = typeof id === 'number' ? id : null
-  const m = materials.value.find((x) => x.id === mid)
+  const m = getMaterial(mid)
   if (m && !String(row.uom || '').trim()) row.uom = m.uom
 }
 
@@ -65,7 +71,7 @@ async function submit() {
   const ls = lines.value
     .filter((l) => l.materialId != null)
     .map((l) => {
-      const m = materials.value.find((x) => x.id === l.materialId)
+      const m = getMaterial(l.materialId)
       return {
         materialId: l.materialId!,
         qty: l.qty,
@@ -147,11 +153,15 @@ onMounted(async () => {
           <el-select
             v-model="row.materialId"
             filterable
-            placeholder="选择"
+            remote
+            reserve-keyword
+            placeholder="输入编码或名称搜索"
+            :remote-method="remoteSearchMaterials"
+            :loading="materialLoading"
             style="width: 100%"
             @change="(id: number | undefined) => onMatChange(row, id)"
           >
-            <el-option v-for="m in materials" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
+            <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
           </el-select>
         </template>
       </el-table-column>

@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
-import { masterApi, type Material, type Supplier } from '../../api/master'
+import { masterApi, type Supplier } from '../../api/master'
+import { useMaterialRemoteSelect } from '../../composables/useMaterialRemoteSelect'
 import { contractApi } from '../../api/contract'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
 
@@ -13,7 +14,12 @@ const procurementOrgId = ref<number | null>(null)
 usePersistedProcurementOrg(procurementOrgId, orgs, 'contract-list')
 
 const suppliers = ref<Supplier[]>([])
-const materials = ref<Material[]>([])
+const {
+  materialOptions,
+  materialLoading,
+  remoteSearch: remoteSearchMaterials,
+  prefetchInitial: prefetchMaterials,
+} = useMaterialRemoteSelect()
 const supplierId = ref<number | null>(null)
 const title = ref('')
 const contractType = ref('FRAMEWORK')
@@ -33,9 +39,8 @@ async function loadOrgs() {
 }
 
 async function loadMaster() {
-  const [s, m] = await Promise.all([masterApi.listSuppliers(), masterApi.listAllMaterialsForSelect()])
+  const [s] = await Promise.all([masterApi.listSuppliers(), prefetchMaterials()])
   suppliers.value = s.data
-  materials.value = m.data
   if (s.data.length) supplierId.value = s.data[0].id
 }
 
@@ -142,8 +147,18 @@ onMounted(async () => {
     <el-table :data="lines" border style="max-width: 960px">
       <el-table-column label="物料（可选）" min-width="200">
         <template #default="{ row }">
-          <el-select v-model="row.materialId" clearable filterable placeholder="不选可填描述" style="width: 100%">
-            <el-option v-for="m in materials" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
+          <el-select
+            v-model="row.materialId"
+            clearable
+            filterable
+            remote
+            reserve-keyword
+            placeholder="输入编码或名称搜索"
+            :remote-method="remoteSearchMaterials"
+            :loading="materialLoading"
+            style="width: 100%"
+          >
+            <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
           </el-select>
         </template>
       </el-table-column>

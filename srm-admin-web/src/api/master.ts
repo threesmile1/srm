@@ -131,9 +131,13 @@ export const masterApi = {
       params: { page: params.page, size: params.size },
     }),
   /** 分页列表：默认每页 10，可选 20 / 50（非法 size 时后端按 10 处理） */
-  listMaterials: (params: { page: number; size: number }) =>
+  listMaterials: (params: { page: number; size: number; q?: string }) =>
     api.get<SpringPage<Material>>('/api/v1/master/materials', {
-      params: { page: params.page, size: params.size },
+      params: {
+        page: params.page,
+        size: params.size,
+        ...(params.q != null && params.q.trim() !== '' ? { q: params.q.trim() } : {}),
+      },
     }),
   /** 下拉框等需全量物料 */
   listAllMaterialsForSelect: () => api.get<Material[]>('/api/v1/master/materials/all'),

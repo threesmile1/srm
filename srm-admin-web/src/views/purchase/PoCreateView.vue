@@ -3,14 +3,20 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
-import { masterApi, type Supplier, type Material } from '../../api/master'
+import { masterApi, type Supplier } from '../../api/master'
+import { useMaterialRemoteSelect } from '../../composables/useMaterialRemoteSelect'
 import { purchaseApi } from '../../api/purchase'
 
 const router = useRouter()
 const orgs = ref<OrgUnit[]>([])
 const suppliers = ref<Supplier[]>([])
-const materials = ref<Material[]>([])
 const warehouses = ref<{ id: number; code: string; name: string }[]>([])
+const {
+  materialOptions,
+  materialLoading,
+  remoteSearch: remoteSearchMaterials,
+  prefetchInitial: prefetchMaterials,
+} = useMaterialRemoteSelect()
 
 const procurementOrgId = ref<number | null>(null)
 const supplierId = ref<number | null>(null)
@@ -26,8 +32,8 @@ async function loadBase() {
     orgs.value = ou.data.filter((o) => o.orgType === 'PROCUREMENT')
     if (orgs.value.length) procurementOrgId.value = orgs.value[0].id
   }
-  suppliers.value = (await masterApi.listSuppliers()).data
-  materials.value = (await masterApi.listAllMaterialsForSelect()).data
+  const [s] = await Promise.all([masterApi.listSuppliers(), prefetchMaterials()])
+  suppliers.value = s.data
   if (suppliers.value.length) supplierId.value = suppliers.value[0].id
 }
 
@@ -116,8 +122,17 @@ onMounted(async () => {
     <el-table :data="lines" border style="max-width: 900px">
       <el-table-column label="物料" width="200">
         <template #default="{ row }">
-          <el-select v-model="row.materialId" filterable placeholder="选择" style="width: 100%">
-            <el-option v-for="m in materials" :key="m.id" :label="m.code" :value="m.id" />
+          <el-select
+            v-model="row.materialId"
+            filterable
+            remote
+            reserve-keyword
+            placeholder="输入编码或名称搜索"
+            :remote-method="remoteSearchMaterials"
+            :loading="materialLoading"
+            style="width: 100%"
+          >
+            <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
           </el-select>
         </template>
       </el-table-column>
