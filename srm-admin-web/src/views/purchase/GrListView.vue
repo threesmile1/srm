@@ -11,11 +11,10 @@ const orgId = ref<number | null>(null)
 usePersistedProcurementOrg(orgId, orgs, 'gr-list')
 const rows = ref<GrSummary[]>([])
 /**
- * 已发货通知待收货：存在 ASN 发货通知行，且关联订单仍有未收清数量
- * 尚未收清订单：无 ASN 关联行，但关联订单仍有未收清数量（如线下/无通知收货）
- * 已收清订单：关联采购订单已全部收清（尚未收清数量 ≤ 0）
+ * 全部：当前采购组织下全部收货单
+ * 待收货的发货通知：存在 ASN 关联行，且关联订单仍有未收清数量
  */
-const listTab = ref<'waitReceive' | 'poOpen' | 'poCleared'>('waitReceive')
+const listTab = ref<'all' | 'waitReceive'>('all')
 
 function openQtyOnPo(r: GrSummary): number {
   const q = r.pendingReceiptQty
@@ -30,16 +29,10 @@ function hasAsn(r: GrSummary): boolean {
 
 const displayRows = computed(() => {
   const all = rows.value
-  switch (listTab.value) {
-    case 'waitReceive':
-      return all.filter((r) => openQtyOnPo(r) > 0 && hasAsn(r))
-    case 'poOpen':
-      return all.filter((r) => openQtyOnPo(r) > 0 && !hasAsn(r))
-    case 'poCleared':
-      return all.filter((r) => openQtyOnPo(r) <= 0)
-    default:
-      return all
+  if (listTab.value === 'waitReceive') {
+    return all.filter((r) => openQtyOnPo(r) > 0 && hasAsn(r))
   }
+  return all
 })
 const tableRef = ref()
 const drawer = ref(false)
@@ -105,9 +98,8 @@ async function exportSelected() {
       <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
     <el-tabs v-model="listTab" class="list-tabs">
-      <el-tab-pane label="已发货通知待收货" name="waitReceive" />
-      <el-tab-pane label="尚未收清订单" name="poOpen" />
-      <el-tab-pane label="已收清订单" name="poCleared" />
+      <el-tab-pane label="全部" name="all" />
+      <el-tab-pane label="待收货的发货通知" name="waitReceive" />
     </el-tabs>
     <el-table ref="tableRef" :data="displayRows" stripe @row-dblclick="(row: GrSummary) => openDetail(row)">
       <template #empty>

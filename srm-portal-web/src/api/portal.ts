@@ -128,6 +128,7 @@ export const portalApi = {
 
   listAsn: () => api.get<AsnNotice[]>('/api/v1/portal/asn-notices'),
   getAsn: (id: number) => api.get<AsnNotice>(`/api/v1/portal/asn-notices/${id}`),
+  voidAsn: (id: number) => api.post<AsnNotice>(`/api/v1/portal/asn-notices/${id}/void`),
   createAsn: (body: {
     purchaseOrderId: number
     shipDate: string

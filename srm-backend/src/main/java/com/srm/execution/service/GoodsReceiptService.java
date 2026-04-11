@@ -3,6 +3,7 @@ package com.srm.execution.service;
 import com.srm.config.SrmProperties;
 import com.srm.execution.domain.AsnLine;
 import com.srm.execution.domain.AsnNotice;
+import com.srm.execution.domain.AsnStatus;
 import com.srm.execution.domain.GoodsReceipt;
 import com.srm.execution.domain.GoodsReceiptLine;
 import com.srm.execution.repo.AsnLineRepository;
@@ -238,6 +239,9 @@ public class GoodsReceiptService {
         List<AsnNotice> notices = asnNoticeRepository.findByPurchaseOrderOrderByIdDesc(po);
         Map<Long, AsnLine> map = new LinkedHashMap<>();
         for (AsnNotice n : notices) {
+            if (n.getStatus() != AsnStatus.SUBMITTED) {
+                continue;
+            }
             for (AsnLine line : n.getLines()) {
                 map.putIfAbsent(line.getPurchaseOrderLine().getId(), line);
             }

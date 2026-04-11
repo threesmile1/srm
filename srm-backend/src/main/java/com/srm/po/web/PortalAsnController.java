@@ -80,6 +80,18 @@ public class PortalAsnController {
         return AsnNoticeResponse.from(asnService.requireWithLines(n.getId()));
     }
 
+    /** 作废发货通知：释放可发货占用；若已有收货关联则不允许。 */
+    @PostMapping("/asn-notices/{id}/void")
+    public AsnNoticeResponse voidNotice(
+            @PathVariable Long id,
+            HttpSession session,
+            @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
+            @RequestParam(value = "supplierId", required = false) Long querySupplierId
+    ) {
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
+        return AsnNoticeResponse.from(asnService.voidBySupplier(sid, id));
+    }
+
     public record PortalAsnCreateRequest(
             @NotNull Long purchaseOrderId,
             @NotNull LocalDate shipDate,

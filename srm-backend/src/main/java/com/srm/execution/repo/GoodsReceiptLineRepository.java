@@ -15,6 +15,9 @@ public interface GoodsReceiptLineRepository extends JpaRepository<GoodsReceiptLi
     @Query("select distinct gl.goodsReceipt.id from GoodsReceiptLine gl where gl.goodsReceipt.id in :grIds and gl.asnLine is not null")
     List<Long> findGoodsReceiptIdsHavingAsnLine(@Param("grIds") Collection<Long> grIds);
 
+    @Query("select count(gl) from GoodsReceiptLine gl join gl.asnLine al where al.asnNotice.id = :asnNoticeId")
+    long countByAsnNoticeId(@Param("asnNoticeId") Long asnNoticeId);
+
     @EntityGraph(attributePaths = {"purchaseOrderLine", "goodsReceipt"})
     @Query("select gl from GoodsReceiptLine gl where gl.goodsReceipt.purchaseOrder.id = :poId and gl.asnLine is null")
     List<GoodsReceiptLine> findForPurchaseOrderWithNullAsnLine(@Param("poId") Long purchaseOrderId);

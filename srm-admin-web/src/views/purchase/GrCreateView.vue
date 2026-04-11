@@ -82,6 +82,7 @@ async function loadPolToAsnMapping() {
     const notices = r.data
     const best = new Map<number, { noticeId: number; asnLineId: number }>()
     for (const n of notices) {
+      if (n.status !== 'SUBMITTED') continue
       for (const line of n.lines) {
         const pid = line.purchaseOrderLineId
         const cur = best.get(pid)

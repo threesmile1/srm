@@ -1,6 +1,7 @@
 package com.srm.execution.repo;
 
 import com.srm.execution.domain.AsnNotice;
+import com.srm.execution.domain.AsnStatus;
 import com.srm.master.domain.Supplier;
 import com.srm.po.domain.PurchaseOrder;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -30,4 +31,6 @@ public interface AsnNoticeRepository extends JpaRepository<AsnNotice, Long> {
     List<AsnNotice> findBySupplierOrderByIdDesc(Supplier supplier);
 
     long countBySupplier_Id(Long supplierId);
+
+    long countBySupplier_IdAndStatus(Long supplierId, AsnStatus status);
 }

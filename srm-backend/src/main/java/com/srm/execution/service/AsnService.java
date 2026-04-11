@@ -5,6 +5,7 @@ import com.srm.execution.domain.AsnNotice;
 import com.srm.execution.domain.AsnStatus;
 import com.srm.execution.repo.AsnLineRepository;
 import com.srm.execution.repo.AsnNoticeRepository;
+import com.srm.execution.repo.GoodsReceiptLineRepository;
 import com.srm.notification.service.NotificationService;
 import com.srm.master.domain.Supplier;
 import com.srm.master.service.MasterDataService;
@@ -35,6 +36,7 @@ public class AsnService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final AsnNoticeRepository asnNoticeRepository;
     private final AsnLineRepository asnLineRepository;
+    private final GoodsReceiptLineRepository goodsReceiptLineRepository;
     private final AsnNumberAllocator asnNumberAllocator;
     private final MasterDataService masterDataService;
     private final NotificationService notificationService;
@@ -146,6 +148,24 @@ public class AsnService {
             log.warn("ASN 提交后写入供应商通知失败: {}", e.getMessage());
         }
         return saved;
+    }
+
+    /**
+     * 供应商作废发货通知：仅 {@link AsnStatus#SUBMITTED} 可作废；若已有收货单行关联该通知下的 ASN 行则不允许。
+     * 作废后不再计入 {@link AsnLineRepository#sumShipQtySubmittedForPolLine}，可重新创建 ASN。
+     */
+    @Transactional
+    public AsnNotice voidBySupplier(long supplierId, long asnId) {
+        AsnNotice n = requireWithLinesForSupplier(supplierId, asnId);
+        if (n.getStatus() != AsnStatus.SUBMITTED) {
+            throw new BadRequestException("仅已提交的发货通知可作废");
+        }
+        long linked = goodsReceiptLineRepository.countByAsnNoticeId(asnId);
+        if (linked > 0) {
+            throw new BadRequestException("已有收货记录关联本发货通知，无法作废");
+        }
+        n.setStatus(AsnStatus.CANCELLED);
+        return asnNoticeRepository.save(n);
     }
 
     public record AsnLineInput(long purchaseOrderLineId, BigDecimal shipQty) {}

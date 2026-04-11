@@ -1,14 +1,48 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { portalApi, type AsnNotice } from '../api/portal'
 import DataTableEmpty from '../components/DataTableEmpty.vue'
 
 const rows = ref<AsnNotice[]>([])
 
-onMounted(async () => {
+const statusLabel: Record<string, string> = {
+  SUBMITTED: '已提交',
+  CANCELLED: '已作废',
+}
+
+async function load() {
   const r = await portalApi.listAsn()
   rows.value = r.data
+}
+
+onMounted(() => {
+  load()
 })
+
+async function voidNotice(row: AsnNotice) {
+  if (row.status !== 'SUBMITTED') return
+  try {
+    await ElMessageBox.confirm(
+      `确定作废发货通知 ${row.asnNo}？作废后将释放可发货占用，可重新创建发货通知。`,
+      '作废确认',
+      { type: 'warning', confirmButtonText: '作废', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await portalApi.voidAsn(row.id)
+    ElMessage.success('已作废')
+    await load()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '作废失败')
+  }
+}
 </script>
 
 <template>
@@ -25,8 +59,26 @@ onMounted(async () => {
       </template>
       <el-table-column prop="asnNo" label="ASN 单号" width="160" />
       <el-table-column prop="poNo" label="采购订单" width="160" />
+      <el-table-column label="状态" width="100">
+        <template #default="{ row }">
+          {{ statusLabel[row.status] ?? row.status }}
+        </template>
+      </el-table-column>
       <el-table-column prop="shipDate" label="发货日" width="120" />
       <el-table-column prop="etaDate" label="预计到货" width="120" />
+      <el-table-column label="操作" width="100" fixed="right">
+        <template #default="{ row }">
+          <el-button
+            v-if="row.status === 'SUBMITTED'"
+            link
+            type="danger"
+            @click="voidNotice(row)"
+          >
+            作废
+          </el-button>
+          <span v-else class="op-muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column type="expand">
         <template #default="{ row }">
           <el-table :data="row.lines" size="small">
@@ -63,5 +115,8 @@ onMounted(async () => {
 }
 .hint a {
   color: var(--el-color-primary);
+}
+.op-muted {
+  color: var(--el-text-color-placeholder);
 }
 </style>

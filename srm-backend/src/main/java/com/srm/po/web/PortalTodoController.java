@@ -1,5 +1,6 @@
 package com.srm.po.web;
 
+import com.srm.execution.domain.AsnStatus;
 import com.srm.execution.repo.AsnNoticeRepository;
 import com.srm.po.domain.PoStatus;
 import com.srm.po.repo.PurchaseOrderLineRepository;
@@ -38,7 +39,7 @@ public class PortalTodoController {
         long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
         long pendingConfirmLines = purchaseOrderLineRepository.countUnconfirmedLinesForSupplierReleasedOrders(
                 sid, PoStatus.RELEASED);
-        long asnNoticeCount = asnNoticeRepository.countBySupplier_Id(sid);
+        long asnNoticeCount = asnNoticeRepository.countBySupplier_IdAndStatus(sid, AsnStatus.SUBMITTED);
         long pendingRfqQuotations = rfqRepository.countAwaitingSupplierQuotation(
                 sid, RfqStatus.PUBLISHED, LocalDate.now());
         return new TodoSummary(pendingConfirmLines, asnNoticeCount, pendingRfqQuotations);
