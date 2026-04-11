@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 仓库主数据：由物料表中的仓库字段聚合（U9 仓名 + 四厂仓），不再从 cangku.cpt 同步独立仓库主档。
+ * 仓库主数据：物料四厂仓字段聚合出仓库编码（采购组织：苏州/成都/华南/水漆工厂），名称由 cangku.cpt 按编码解析。
  */
 @Tag(name = "MasterWarehouse", description = "主数据：仓库（来自物料聚合）")
 @RestController

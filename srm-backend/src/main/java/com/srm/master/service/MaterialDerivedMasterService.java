@@ -1,5 +1,6 @@
 package com.srm.master.service;
 
+import com.srm.integration.u9.CangkuWarehouseNameResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -8,7 +9,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 从物料主数据聚合「仓库名 / 供应商」引用，替代独立 U9 仓库、lpgys 同步展示。
@@ -18,6 +21,7 @@ import java.util.List;
 public class MaterialDerivedMasterService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final CangkuWarehouseNameResolver cangkuWarehouseNameResolver;
 
     /** 与 {@link #pageSupplierRefs} 一致：物料快照 + material_supplier_u9 合并后的供应商维度 */
     private static final String MATERIAL_SUPPLIER_REF_UNION = """
@@ -40,7 +44,17 @@ public class MaterialDerivedMasterService {
             GROUP BY u9_supplier_code
             """;
 
-    public record MaterialWarehouseRefRow(String scope, String warehouseName, long materialCount) {}
+    /**
+     * @param procurementOrg 采购组织维度：苏州工厂 / 成都工厂 / 华南工厂 / 水漆工厂
+     * @param warehouseCode  物料表中的仓库编码（原与「名称」混用列）
+     * @param warehouseName  由帆软 cangku.cpt 按编码解析；失败时为 null
+     */
+    public record MaterialWarehouseRefRow(
+            String procurementOrg,
+            String warehouseCode,
+            String warehouseName,
+            long materialCount
+    ) {}
 
     public record MaterialSupplierRefRow(String u9SupplierCode, String u9SupplierName, long refCount) {}
 
@@ -59,25 +73,25 @@ public class MaterialDerivedMasterService {
                         rs.getLong("ref_count")));
     }
 
-    @Transactional(readOnly = true)
+    /** 含帆软 HTTP，不用只读长事务，避免占用连接。 */
     public Page<MaterialWarehouseRefRow> pageWarehouseRefs(Pageable pageable) {
         String union = """
-                SELECT '苏州', TRIM(u9_warehouse_suzhou), COUNT(*)
+                SELECT '苏州工厂' AS procurement_org, TRIM(u9_warehouse_suzhou) AS warehouse_code, COUNT(*) AS material_count
                 FROM material_item
                 WHERE u9_warehouse_suzhou IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_suzhou)) > 0
                 GROUP BY TRIM(u9_warehouse_suzhou)
                 UNION ALL
-                SELECT '成都', TRIM(u9_warehouse_chengdu), COUNT(*)
+                SELECT '成都工厂' AS procurement_org, TRIM(u9_warehouse_chengdu) AS warehouse_code, COUNT(*) AS material_count
                 FROM material_item
                 WHERE u9_warehouse_chengdu IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_chengdu)) > 0
                 GROUP BY TRIM(u9_warehouse_chengdu)
                 UNION ALL
-                SELECT '华南', TRIM(u9_warehouse_huanan), COUNT(*)
+                SELECT '华南工厂' AS procurement_org, TRIM(u9_warehouse_huanan) AS warehouse_code, COUNT(*) AS material_count
                 FROM material_item
                 WHERE u9_warehouse_huanan IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_huanan)) > 0
                 GROUP BY TRIM(u9_warehouse_huanan)
                 UNION ALL
-                SELECT '水漆', TRIM(u9_warehouse_shuiqi), COUNT(*)
+                SELECT '水漆工厂' AS procurement_org, TRIM(u9_warehouse_shuiqi) AS warehouse_code, COUNT(*) AS material_count
                 FROM material_item
                 WHERE u9_warehouse_shuiqi IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_shuiqi)) > 0
                 GROUP BY TRIM(u9_warehouse_shuiqi)
@@ -88,14 +102,19 @@ public class MaterialDerivedMasterService {
         if (tot == 0) {
             return new PageImpl<>(List.of(), pageable, 0);
         }
-        String paged = "SELECT scope_label, warehouse_name, material_count FROM (" + union
-                + ") t ORDER BY scope_label, warehouse_name LIMIT ? OFFSET ?";
+        String paged = "SELECT procurement_org, warehouse_code, material_count FROM (" + union
+                + ") t ORDER BY procurement_org, warehouse_code LIMIT ? OFFSET ?";
+        Map<String, String> nameByCode = new HashMap<>();
         List<MaterialWarehouseRefRow> content = jdbcTemplate.query(
                 paged,
-                (rs, rowNum) -> new MaterialWarehouseRefRow(
-                        rs.getString("scope_label"),
-                        rs.getString("warehouse_name"),
-                        rs.getLong("material_count")),
+                (rs, rowNum) -> {
+                    String org = rs.getString("procurement_org");
+                    String code = rs.getString("warehouse_code");
+                    long cnt = rs.getLong("material_count");
+                    String displayName = nameByCode.computeIfAbsent(
+                            code, c -> cangkuWarehouseNameResolver.resolveDisplayNameByWarehouseCode(c));
+                    return new MaterialWarehouseRefRow(org, code, displayName, cnt);
+                },
                 pageable.getPageSize(),
                 pageable.getOffset());
         return new PageImpl<>(content, pageable, tot);

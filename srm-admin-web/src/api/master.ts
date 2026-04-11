@@ -6,6 +6,9 @@ const U9_SYNC_TIMEOUT_MS = 600_000
 /** 按料号逐次调帆软，全量物料时总耗时长；0 表示 Axios 不限制单次请求超时 */
 const FACTORY_WAREHOUSE_SYNC_TIMEOUT_MS = 0
 
+/** 仓库列表按编码逐次调 cangku 解析名称，可能较慢 */
+const WAREHOUSE_LIST_TIMEOUT_MS = 0
+
 export type Supplier = {
   id: number
   code: string
@@ -72,10 +75,11 @@ export type SpringPage<T> = {
   number: number
 }
 
-/** 物料表聚合的仓库名（U9/苏州/成都/华南/水漆） */
+/** 物料表聚合的仓库编码 + cangku.cpt 解析名称 */
 export type MaterialWarehouseRef = {
-  scope: string
-  warehouseName: string
+  procurementOrg: string
+  warehouseCode: string
+  warehouseName: string | null
   materialCount: number
 }
 
@@ -171,5 +175,6 @@ export const masterApi = {
   listWarehouses: (params: { page: number; size: number }) =>
     api.get<SpringPage<MaterialWarehouseRef>>('/api/v1/master/warehouses', {
       params: { page: params.page, size: params.size },
+      timeout: WAREHOUSE_LIST_TIMEOUT_MS,
     }),
 }

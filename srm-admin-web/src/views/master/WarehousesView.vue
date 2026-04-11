@@ -35,13 +35,15 @@ onMounted(load)
       <span class="title">仓库</span>
     </div>
     <p class="hint">
-      由物料主数据中的仓库字段聚合（U9 仓库名、苏州/成都/华南/水漆仓），不再从 U9 cangku.cpt 单独同步仓库主档。
+      采购组织对应物料上的苏州/成都/华南/水漆工厂仓字段；「仓库编码」为物料中存储的编码。仓库名称由后端按编码请求帆软
+      cangku.cpt（parameters：name=code，value=仓库编码）解析返回的 name；若未配置 U9 或请求失败则名称为空。
     </p>
     <el-table :data="rows" stripe>
       <template #empty>
         <DataTableEmpty />
       </template>
-      <el-table-column prop="scope" label="维度" width="88" />
+      <el-table-column prop="procurementOrg" label="采购组织" width="108" />
+      <el-table-column prop="warehouseCode" label="仓库编码" width="140" show-overflow-tooltip />
       <el-table-column prop="warehouseName" label="仓库名称" min-width="200" show-overflow-tooltip />
       <el-table-column prop="materialCount" label="物料条数" width="100" />
     </el-table>

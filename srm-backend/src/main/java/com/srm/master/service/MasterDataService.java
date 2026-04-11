@@ -52,26 +52,7 @@ public class MasterDataService {
             if (ref == null || !StringUtils.hasText(ref.u9SupplierCode())) {
                 continue;
             }
-            String code = ref.u9SupplierCode().trim();
-            String name = StringUtils.hasText(ref.u9SupplierName()) ? ref.u9SupplierName().trim() : code;
-            Optional<Supplier> existing = supplierRepository.findByCode(code);
-            if (existing.isPresent()) {
-                Supplier s = existing.get();
-                if (!name.equals(s.getName())) {
-                    s.setName(name);
-                    supplierRepository.save(s);
-                }
-                s.getAuthorizedProcurementOrgs().clear();
-                attachOrgScopes(s, allProcIds);
-                supplierRepository.save(s);
-            } else {
-                Supplier s = new Supplier();
-                s.setCode(code);
-                s.setName(name);
-                s.setU9VendorCode(code);
-                attachOrgScopes(s, allProcIds);
-                supplierRepository.save(s);
-            }
+            upsertSupplierMasterForU9(ref.u9SupplierCode().trim(), ref.u9SupplierName(), allProcIds);
         }
         Set<String> allowed = refs.stream()
                 .filter(r -> r != null && StringUtils.hasText(r.u9SupplierCode()))
@@ -82,6 +63,49 @@ public class MasterDataService {
             supplierRepository.findByCode(code).ifPresent(out::add);
         }
         return out;
+    }
+
+    /**
+     * lpgys 等写入物料侧供应商后同步调用，使「主数据-供应商」与 {@link #listSuppliers()} 使用的 supplier 主档立即一致。
+     *
+     * @param u9SupplierCode 已规范化的 U9 供应商编码（非空）
+     * @param u9SupplierName 可为 null，则展示名回退为编码
+     */
+    @Transactional
+    public void upsertSupplierMasterForU9(String u9SupplierCode, String u9SupplierName) {
+        if (!StringUtils.hasText(u9SupplierCode)) {
+            return;
+        }
+        List<OrgUnit> procOrgs = orgUnitRepository.findByOrgType(OrgUnitType.PROCUREMENT);
+        Set<Long> allProcIds = procOrgs.stream().map(OrgUnit::getId).collect(Collectors.toCollection(HashSet::new));
+        if (allProcIds.isEmpty()) {
+            return;
+        }
+        upsertSupplierMasterForU9(u9SupplierCode.trim(), u9SupplierName, allProcIds);
+    }
+
+    private void upsertSupplierMasterForU9(String code, String u9SupplierName, Set<Long> allProcurementOrgIds) {
+        String name = StringUtils.hasText(u9SupplierName) ? u9SupplierName.trim() : code;
+        Optional<Supplier> existing = supplierRepository.findByCode(code);
+        if (existing.isPresent()) {
+            Supplier s = existing.get();
+            if (!name.equals(s.getName())) {
+                s.setName(name);
+            }
+            if (!StringUtils.hasText(s.getU9VendorCode())) {
+                s.setU9VendorCode(code);
+            }
+            s.getAuthorizedProcurementOrgs().clear();
+            attachOrgScopes(s, allProcurementOrgIds);
+            supplierRepository.save(s);
+        } else {
+            Supplier s = new Supplier();
+            s.setCode(code);
+            s.setName(name);
+            s.setU9VendorCode(code);
+            attachOrgScopes(s, allProcurementOrgIds);
+            supplierRepository.save(s);
+        }
     }
 
     @Transactional(readOnly = true)

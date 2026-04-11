@@ -4,6 +4,7 @@ import com.srm.master.domain.MaterialItem;
 import com.srm.master.domain.MaterialSupplierU9;
 import com.srm.master.repo.MaterialItemRepository;
 import com.srm.master.repo.MaterialSupplierU9Repository;
+import com.srm.master.service.MasterDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class U9MaterialSupplierWriter {
 
     private final MaterialItemRepository materialItemRepository;
     private final MaterialSupplierU9Repository materialSupplierU9Repository;
+    private final MasterDataService masterDataService;
 
     public record Outcome(int linksSaved) {}
 
@@ -68,6 +70,11 @@ public class U9MaterialSupplierWriter {
         m.setU9SupplierCode(normalizeU9SupplierCode(first.getSupplierCode()));
         m.setU9SupplierName(trimToNull(first.getSupplierName()));
         materialItemRepository.save(m);
+        for (U9LpgysSupplierRow r : deduped) {
+            masterDataService.upsertSupplierMasterForU9(
+                    normalizeU9SupplierCode(r.getSupplierCode()),
+                    trimToNull(r.getSupplierName()));
+        }
         return new Outcome(batch.size());
     }
 
