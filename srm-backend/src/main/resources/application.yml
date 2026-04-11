@@ -62,6 +62,11 @@ srm:
     # material-shuiqi-report-path: API/cangku_shuiqi.cpt
     # factory-warehouse-report-parameter-name: code
     # material-factory-warehouse-parameters: []  # 非空时按模板传参，value 为空则注入当前料号
+    # 物料四厂仓写入 warehouse 表时绑定的采购组织 org_unit.code（不配则按名称「苏州工厂」等查找）
+    # factory-warehouse-org-code-suzhou: ""
+    # factory-warehouse-org-code-chengdu: ""
+    # factory-warehouse-org-code-huanan: ""
+    # factory-warehouse-org-code-shuiqi: ""
     # fine-report-parameters:
     #   - name: pinming
     #     type: String

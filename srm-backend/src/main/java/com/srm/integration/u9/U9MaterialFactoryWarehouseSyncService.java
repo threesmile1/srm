@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.srm.config.SrmProperties;
 import com.srm.master.domain.MaterialItem;
 import com.srm.master.repo.MaterialItemRepository;
+import com.srm.master.service.WarehouseMasterFromMaterialService;
 import com.srm.web.error.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ public class U9MaterialFactoryWarehouseSyncService {
     private final SrmProperties properties;
     private final U9DecisionClient u9DecisionClient;
     private final MaterialItemRepository materialItemRepository;
+    private final WarehouseMasterFromMaterialService warehouseMasterFromMaterialService;
 
     public record FactoryWarehouseSyncResult(
             int yiguiRows,
@@ -151,6 +153,11 @@ public class U9MaterialFactoryWarehouseSyncService {
             }
 
             materialItemRepository.save(material);
+            try {
+                warehouseMasterFromMaterialService.syncWarehousesFromMaterialItem(material);
+            } catch (Exception e) {
+                log.warn("物料 {} 四厂仓已保存，但写入 warehouse 主档失败：{}", material.getCode(), e.getMessage());
+            }
         }
 
         log.info("U9 物料四厂仓库同步(按料号) materials={} yigui ok={} skip/err={} shuiqi ok={} skip/err={}",

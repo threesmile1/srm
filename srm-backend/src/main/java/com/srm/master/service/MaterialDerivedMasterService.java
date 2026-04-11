@@ -1,6 +1,5 @@
 package com.srm.master.service;
 
-import com.srm.integration.u9.CangkuWarehouseNameResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -9,9 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 从物料主数据聚合「仓库名 / 供应商」引用，替代独立 U9 仓库、lpgys 同步展示。
@@ -21,7 +18,6 @@ import java.util.Map;
 public class MaterialDerivedMasterService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final CangkuWarehouseNameResolver cangkuWarehouseNameResolver;
 
     /** 与 {@link #pageSupplierRefs} 一致：物料快照 + material_supplier_u9 合并后的供应商维度 */
     private static final String MATERIAL_SUPPLIER_REF_UNION = """
@@ -73,48 +69,47 @@ public class MaterialDerivedMasterService {
                         rs.getLong("ref_count")));
     }
 
-    /** 含帆软 HTTP，不用只读长事务，避免占用连接。 */
+    /**
+     * 分页列表来自 {@code warehouse} 主档（名称等由物料四厂仓同步时写入）；「物料条数」按各厂列与采购组织名称对齐统计。
+     */
+    @Transactional(readOnly = true)
     public Page<MaterialWarehouseRefRow> pageWarehouseRefs(Pageable pageable) {
-        String union = """
-                SELECT '苏州工厂' AS procurement_org, TRIM(u9_warehouse_suzhou) AS warehouse_code, COUNT(*) AS material_count
-                FROM material_item
-                WHERE u9_warehouse_suzhou IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_suzhou)) > 0
-                GROUP BY TRIM(u9_warehouse_suzhou)
-                UNION ALL
-                SELECT '成都工厂' AS procurement_org, TRIM(u9_warehouse_chengdu) AS warehouse_code, COUNT(*) AS material_count
-                FROM material_item
-                WHERE u9_warehouse_chengdu IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_chengdu)) > 0
-                GROUP BY TRIM(u9_warehouse_chengdu)
-                UNION ALL
-                SELECT '华南工厂' AS procurement_org, TRIM(u9_warehouse_huanan) AS warehouse_code, COUNT(*) AS material_count
-                FROM material_item
-                WHERE u9_warehouse_huanan IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_huanan)) > 0
-                GROUP BY TRIM(u9_warehouse_huanan)
-                UNION ALL
-                SELECT '水漆工厂' AS procurement_org, TRIM(u9_warehouse_shuiqi) AS warehouse_code, COUNT(*) AS material_count
-                FROM material_item
-                WHERE u9_warehouse_shuiqi IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_shuiqi)) > 0
-                GROUP BY TRIM(u9_warehouse_shuiqi)
-                """;
-        Long total = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM (" + union + ") t", Long.class);
+        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM warehouse", Long.class);
         long tot = total != null ? total : 0;
         if (tot == 0) {
             return new PageImpl<>(List.of(), pageable, 0);
         }
-        String paged = "SELECT procurement_org, warehouse_code, material_count FROM (" + union
-                + ") t ORDER BY procurement_org, warehouse_code LIMIT ? OFFSET ?";
-        Map<String, String> nameByCode = new HashMap<>();
+        String paged = """
+                SELECT procurement_org, warehouse_code, warehouse_name, material_count FROM (
+                    SELECT ou.name AS procurement_org,
+                           ou.code AS org_sort,
+                           w.code AS warehouse_code,
+                           w.name AS warehouse_name,
+                           COUNT(DISTINCT mi.id) AS material_count
+                    FROM warehouse w
+                    JOIN org_unit ou ON ou.id = w.procurement_org_id
+                    LEFT JOIN material_item mi ON (
+                        (ou.name = '苏州工厂' AND mi.u9_warehouse_suzhou IS NOT NULL
+                            AND TRIM(mi.u9_warehouse_suzhou) = w.code)
+                        OR (ou.name = '成都工厂' AND mi.u9_warehouse_chengdu IS NOT NULL
+                            AND TRIM(mi.u9_warehouse_chengdu) = w.code)
+                        OR (ou.name = '华南工厂' AND mi.u9_warehouse_huanan IS NOT NULL
+                            AND TRIM(mi.u9_warehouse_huanan) = w.code)
+                        OR (ou.name = '水漆工厂' AND mi.u9_warehouse_shuiqi IS NOT NULL
+                            AND TRIM(mi.u9_warehouse_shuiqi) = w.code)
+                    )
+                    GROUP BY w.id, ou.name, ou.code, w.code, w.name
+                ) t
+                ORDER BY org_sort, warehouse_code
+                LIMIT ? OFFSET ?
+                """;
         List<MaterialWarehouseRefRow> content = jdbcTemplate.query(
                 paged,
-                (rs, rowNum) -> {
-                    String org = rs.getString("procurement_org");
-                    String code = rs.getString("warehouse_code");
-                    long cnt = rs.getLong("material_count");
-                    String displayName = nameByCode.computeIfAbsent(
-                            code, c -> cangkuWarehouseNameResolver.resolveDisplayNameByWarehouseCode(c));
-                    return new MaterialWarehouseRefRow(org, code, displayName, cnt);
-                },
+                (rs, rowNum) -> new MaterialWarehouseRefRow(
+                        rs.getString("procurement_org"),
+                        rs.getString("warehouse_code"),
+                        rs.getString("warehouse_name"),
+                        rs.getLong("material_count")),
                 pageable.getPageSize(),
                 pageable.getOffset());
         return new PageImpl<>(content, pageable, tot);

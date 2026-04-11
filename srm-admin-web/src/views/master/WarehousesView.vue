@@ -35,8 +35,9 @@ onMounted(load)
       <span class="title">仓库</span>
     </div>
     <p class="hint">
-      采购组织对应物料上的苏州/成都/华南/水漆工厂仓字段；「仓库编码」为物料中存储的编码。仓库名称由后端按编码请求帆软
-      cangku.cpt（parameters：name=code，value=仓库编码）解析返回的 name；若未配置 U9 或请求失败则名称为空。
+      数据来自数据库
+      <code>warehouse</code>
+      表（四厂仓从 U9/帆软同步到物料后写入）。仓库名称在同步时已按编码请求帆软 cangku.cpt 解析并落库；列表中的「物料条数」为当前引用该仓编码的物料数量。
     </p>
     <el-table :data="rows" stripe>
       <template #empty>

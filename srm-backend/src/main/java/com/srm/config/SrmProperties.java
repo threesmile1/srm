@@ -108,6 +108,15 @@ public class SrmProperties {
          */
         private List<FineReportParameter> materialFactoryWarehouseParameters = new ArrayList<>();
 
+        /**
+         * 物料四厂仓写入 {@code warehouse} 表时绑定的采购组织 {@code org_unit.code}（与苏州/成都/华南/水漆列对应）。
+         * 不配则按采购组织名称「苏州工厂」「成都工厂」「华南工厂」「水漆工厂」查找。
+         */
+        private String factoryWarehouseOrgCodeSuzhou = "";
+        private String factoryWarehouseOrgCodeChengdu = "";
+        private String factoryWarehouseOrgCodeHuanan = "";
+        private String factoryWarehouseOrgCodeShuiqi = "";
+
         private String httpUser = "";
         private String httpPassword = "";
 
