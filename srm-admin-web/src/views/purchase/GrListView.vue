@@ -2,7 +2,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
-import { executionApi, downloadArrayBuffer, type GrDetail, type GrSummary } from '../../api/execution'
+import {
+  executionApi,
+  downloadArrayBuffer,
+  type GrDetail,
+  type GrSummary,
+  type OpenPoAsnReceiptHint,
+} from '../../api/execution'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
@@ -10,11 +16,18 @@ const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
 usePersistedProcurementOrg(orgId, orgs, 'gr-list')
 const rows = ref<GrSummary[]>([])
+/** 已有 ASN、本组织下尚未创建任何收货单的订单 */
+const openPoHints = ref<OpenPoAsnReceiptHint[]>([])
+
 /**
  * 全部：当前采购组织下全部收货单
- * 待收货的发货通知：存在 ASN 关联行，且关联订单仍有未收清数量
+ * 待收货的发货通知：订单有已提交发货通知且尚未收清；含「仅有发货通知、尚未建收货单」的待办行
  */
 const listTab = ref<'all' | 'waitReceive'>('all')
+
+type GrListRow =
+  | { rowKind: 'GR'; gr: GrSummary }
+  | { rowKind: 'OPEN_PO'; open: OpenPoAsnReceiptHint }
 
 function openQtyOnPo(r: GrSummary): number {
   const q = r.pendingReceiptQty
@@ -23,17 +36,20 @@ function openQtyOnPo(r: GrSummary): number {
   return Number.isFinite(n) ? n : 0
 }
 
-function hasAsn(r: GrSummary): boolean {
-  return r.hasAsnShipment === true
+function matchesWaitReceive(gr: GrSummary): boolean {
+  if (openQtyOnPo(gr) <= 0) return false
+  return gr.hasAsnShipment === true || gr.purchaseOrderHasSubmittedAsn === true
 }
 
-const displayRows = computed(() => {
-  const all = rows.value
-  if (listTab.value === 'waitReceive') {
-    return all.filter((r) => openQtyOnPo(r) > 0 && hasAsn(r))
+const displayRows = computed((): GrListRow[] => {
+  if (listTab.value === 'all') {
+    return rows.value.map((gr) => ({ rowKind: 'GR' as const, gr }))
   }
-  return all
+  const openPart: GrListRow[] = openPoHints.value.map((open) => ({ rowKind: 'OPEN_PO', open }))
+  const grPart: GrListRow[] = rows.value.filter(matchesWaitReceive).map((gr) => ({ rowKind: 'GR', gr }))
+  return [...openPart, ...grPart]
 })
+
 const tableRef = ref()
 const drawer = ref(false)
 const detail = ref<GrDetail | null>(null)
@@ -47,8 +63,12 @@ async function loadOrgs() {
 
 async function loadRows() {
   if (orgId.value == null) return
-  const r = await executionApi.listGoodsReceipts(orgId.value)
+  const [r, o] = await Promise.all([
+    executionApi.listGoodsReceipts(orgId.value),
+    executionApi.listPendingOpenPoWithAsn(orgId.value),
+  ])
   rows.value = r.data
+  openPoHints.value = o.data
 }
 
 watch(orgId, () => {
@@ -60,20 +80,29 @@ onMounted(async () => {
   await loadRows()
 })
 
-async function openDetail(row: GrSummary) {
-  const r = await executionApi.getGoodsReceipt(row.id)
-  detail.value = r.data
+async function openDetail(gr: GrSummary) {
+  const res = await executionApi.getGoodsReceipt(gr.id)
+  detail.value = res.data
   drawer.value = true
 }
 
+function onRowDblclick(row: GrListRow) {
+  if (row.rowKind === 'GR') openDetail(row.gr)
+}
+
+function rowSelectable(row: GrListRow) {
+  return row.rowKind === 'GR'
+}
+
 async function exportSelected() {
-  const sel: GrSummary[] = tableRef.value?.getSelectionRows?.() ?? []
-  if (!sel.length) {
+  const sel: GrListRow[] = tableRef.value?.getSelectionRows?.() ?? []
+  const ids = sel.filter((x): x is Extract<GrListRow, { rowKind: 'GR' }> => x.rowKind === 'GR').map((x) => x.gr.id)
+  if (!ids.length) {
     ElMessage.warning('请选择要导出的收货单')
     return
   }
   try {
-    const r = await executionApi.exportGoodsReceipts(sel.map((x) => x.id))
+    const r = await executionApi.exportGoodsReceipts(ids)
     downloadArrayBuffer(r.data, 'srm-goods-receipts.xlsx')
     ElMessage.success('已下载')
     await loadRows()
@@ -101,20 +130,75 @@ async function exportSelected() {
       <el-tab-pane label="全部" name="all" />
       <el-tab-pane label="待收货的发货通知" name="waitReceive" />
     </el-tabs>
-    <el-table ref="tableRef" :data="displayRows" stripe @row-dblclick="(row: GrSummary) => openDetail(row)">
+    <p v-if="listTab === 'waitReceive'" class="tab-hint">
+      含「仅有发货通知、尚未登记收货单」的待办；已有收货单且关联 ASN 或订单侧有发货通知的也会列出。
+    </p>
+    <el-table
+      ref="tableRef"
+      :data="displayRows"
+      stripe
+      :row-key="(row: GrListRow) => (row.rowKind === 'OPEN_PO' ? 'o-' + row.open.purchaseOrderId : 'g-' + row.gr.id)"
+      :selectable="rowSelectable"
+      @row-dblclick="onRowDblclick"
+    >
       <template #empty>
         <DataTableEmpty />
       </template>
       <el-table-column type="selection" width="42" />
-      <el-table-column prop="grNo" label="收货单号" width="160" />
-      <el-table-column prop="poNo" label="采购订单" width="160" />
-      <el-table-column prop="warehouseCode" label="仓库" width="100" />
-      <el-table-column prop="receiptDate" label="收货日期" width="120" />
-      <el-table-column prop="pendingReceiptQty" label="尚未收清数量" min-width="120" />
-      <el-table-column prop="exportStatus" label="导出状态" width="110" />
-      <el-table-column label="操作" width="100">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openDetail(row)">明细</el-button>
+      <el-table-column label="收货单号" width="160">
+        <template #default="{ row }: { row: GrListRow }">
+          <span v-if="row.rowKind === 'OPEN_PO'" class="muted">（待创建）</span>
+          <span v-else>{{ row.gr.grNo }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="采购订单" width="160">
+        <template #default="{ row }: { row: GrListRow }">
+          {{ row.rowKind === 'OPEN_PO' ? row.open.poNo : row.gr.poNo }}
+        </template>
+      </el-table-column>
+      <el-table-column label="发货通知" width="150">
+        <template #default="{ row }: { row: GrListRow }">
+          <span v-if="row.rowKind === 'OPEN_PO'">{{ row.open.asnNo }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="仓库" width="100">
+        <template #default="{ row }: { row: GrListRow }">
+          <span v-if="row.rowKind === 'OPEN_PO'" class="muted">—</span>
+          <span v-else>{{ row.gr.warehouseCode }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="收货日期" width="120">
+        <template #default="{ row }: { row: GrListRow }">
+          <span v-if="row.rowKind === 'OPEN_PO'" class="muted">—</span>
+          <span v-else>{{ row.gr.receiptDate }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="尚未收清数量" min-width="120">
+        <template #default="{ row }: { row: GrListRow }">
+          {{ row.rowKind === 'OPEN_PO' ? row.open.pendingReceiptQty : row.gr.pendingReceiptQty }}
+        </template>
+      </el-table-column>
+      <el-table-column label="导出状态" width="110">
+        <template #default="{ row }: { row: GrListRow }">
+          <span v-if="row.rowKind === 'OPEN_PO'" class="muted">—</span>
+          <span v-else>{{ row.gr.exportStatus }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="140">
+        <template #default="{ row }: { row: GrListRow }">
+          <router-link
+            v-if="row.rowKind === 'OPEN_PO' && orgId != null"
+            class="link-go"
+            :to="{
+              path: '/purchase/receipts/new',
+              query: { procurementOrgId: String(orgId), poId: String(row.open.purchaseOrderId) },
+            }"
+          >
+            去收货
+          </router-link>
+          <el-button v-else-if="row.rowKind === 'GR'" link type="primary" @click="openDetail(row.gr)">明细</el-button>
+          <span v-else class="muted">—</span>
         </template>
       </el-table-column>
     </el-table>
@@ -160,5 +244,18 @@ async function exportSelected() {
 }
 .list-tabs :deep(.el-tabs__header) {
   margin-bottom: 0;
+}
+.tab-hint {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+}
+.link-go {
+  color: var(--el-color-primary);
+  font-size: var(--el-font-size-base);
 }
 </style>

@@ -49,6 +49,16 @@ export type GrSummary = {
   pendingReceiptQty?: string
   /** 是否存在至少一行关联发货通知 ASN（列表接口返回） */
   hasAsnShipment?: boolean
+  /** 关联订单是否存在已提交的发货通知（收货行可能尚未关联 ASN） */
+  purchaseOrderHasSubmittedAsn?: boolean
+}
+
+/** 已有发货通知、尚未创建任何收货单的采购订单（列表「待收货的发货通知」待建收货） */
+export type OpenPoAsnReceiptHint = {
+  purchaseOrderId: number
+  poNo: string
+  asnNo: string
+  pendingReceiptQty: string
 }
 
 export type GrDetail = GrSummary & {
@@ -115,6 +125,12 @@ export const executionApi = {
 
   listGoodsReceipts: (procurementOrgId: number) =>
     api.get<GrSummary[]>('/api/v1/goods-receipts', { params: { procurementOrgId } }),
+
+  /** 有已提交 ASN、本组织下尚未建过收货单的订单（用于待收货页签） */
+  listPendingOpenPoWithAsn: (procurementOrgId: number) =>
+    api.get<OpenPoAsnReceiptHint[]>('/api/v1/goods-receipts/pending-open-po-with-asn', {
+      params: { procurementOrgId },
+    }),
 
   getGoodsReceipt: (id: number) => api.get<GrDetail>(`/api/v1/goods-receipts/${id}`),
 

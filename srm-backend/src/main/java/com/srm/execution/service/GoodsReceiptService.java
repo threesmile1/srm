@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -81,13 +82,75 @@ public class GoodsReceiptService {
         if (!grIds.isEmpty()) {
             withAsn.addAll(goodsReceiptLineRepository.findGoodsReceiptIdsHavingAsnLine(grIds));
         }
+        Set<Long> poIdsWithSubmittedAsn = new HashSet<>();
+        if (!poIds.isEmpty()) {
+            poIdsWithSubmittedAsn.addAll(asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsn(poIds));
+        }
         return list.stream()
                 .map(g -> GoodsReceiptSummaryResponse.from(
                         g,
                         pendingByPo.getOrDefault(g.getPurchaseOrder().getId(), BigDecimal.ZERO),
-                        withAsn.contains(g.getId())))
+                        withAsn.contains(g.getId()),
+                        poIdsWithSubmittedAsn.contains(g.getPurchaseOrder().getId())))
                 .toList();
     }
+
+    /**
+     * 已有供应商提交的发货通知、但本采购组织下尚未创建任何收货单的订单（用于「待收货的发货通知」待建收货入口）。
+     */
+    @Transactional(readOnly = true)
+    public List<OpenPoAsnReceiptRow> listOpenPurchaseOrdersWithSubmittedAsnNoGoodsReceipt(Long procurementOrgId) {
+        List<PurchaseOrder> pos = purchaseOrderRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId);
+        Set<Long> poWithAnyGr = goodsReceiptRepository.findDistinctPurchaseOrderIdsByProcurementOrgId(procurementOrgId);
+        Set<Long> allReleasedPoIds = pos.stream()
+                .filter(p -> p.getStatus() == PoStatus.RELEASED)
+                .map(PurchaseOrder::getId)
+                .collect(Collectors.toSet());
+        if (allReleasedPoIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, BigDecimal> pendingByPo = new HashMap<>();
+        for (Object[] row : purchaseOrderLineRepository.sumPendingReceiptQtyByPurchaseOrderIds(allReleasedPoIds)) {
+            pendingByPo.put((Long) row[0], (BigDecimal) row[1]);
+        }
+        Set<Long> withSubmittedAsn = new HashSet<>(asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsn(allReleasedPoIds));
+        List<OpenPoAsnReceiptRow> out = new ArrayList<>();
+        for (PurchaseOrder po : pos) {
+            if (po.getStatus() != PoStatus.RELEASED) {
+                continue;
+            }
+            long poId = po.getId();
+            if (poWithAnyGr.contains(poId)) {
+                continue;
+            }
+            if (!withSubmittedAsn.contains(poId)) {
+                continue;
+            }
+            BigDecimal pend = pendingByPo.getOrDefault(poId, BigDecimal.ZERO);
+            if (pend.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            AsnNotice asn = asnNoticeRepository
+                    .findFirstByPurchaseOrder_IdAndStatusOrderByIdDesc(poId, AsnStatus.SUBMITTED)
+                    .orElse(null);
+            if (asn == null) {
+                continue;
+            }
+            out.add(new OpenPoAsnReceiptRow(
+                    poId,
+                    po.getPoNo(),
+                    asn.getAsnNo(),
+                    pend.stripTrailingZeros().toPlainString()));
+        }
+        return out;
+    }
+
+    public record OpenPoAsnReceiptRow(
+            long purchaseOrderId,
+            String poNo,
+            String asnNo,
+            String pendingReceiptQty
+    ) {}
 
     @Transactional(readOnly = true)
     public GoodsReceipt requireDetail(Long id) {

@@ -32,6 +32,15 @@ public class GoodsReceiptController {
         return goodsReceiptService.listSummaryByOrg(procurementOrgId);
     }
 
+    /**
+     * 已有供应商提交的发货通知、但尚未在本组织下创建任何收货单的采购订单（用于列表「待收货的发货通知」待建收货入口）。
+     */
+    @GetMapping("/pending-open-po-with-asn")
+    public List<GoodsReceiptService.OpenPoAsnReceiptRow> listPendingOpenPoWithAsn(
+            @RequestParam Long procurementOrgId) {
+        return goodsReceiptService.listOpenPurchaseOrdersWithSubmittedAsnNoGoodsReceipt(procurementOrgId);
+    }
+
     @GetMapping("/{id}")
     public GoodsReceiptDetailResponse get(@PathVariable Long id) {
         return GoodsReceiptDetailResponse.from(goodsReceiptService.requireDetail(id));

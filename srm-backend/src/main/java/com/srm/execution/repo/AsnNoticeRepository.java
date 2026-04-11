@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,4 +34,9 @@ public interface AsnNoticeRepository extends JpaRepository<AsnNotice, Long> {
     long countBySupplier_Id(Long supplierId);
 
     long countBySupplier_IdAndStatus(Long supplierId, AsnStatus status);
+
+    @Query("select distinct a.purchaseOrder.id from AsnNotice a where a.purchaseOrder.id in :poIds and a.status = 'SUBMITTED'")
+    List<Long> findPurchaseOrderIdsHavingSubmittedAsn(@Param("poIds") Collection<Long> poIds);
+
+    Optional<AsnNotice> findFirstByPurchaseOrder_IdAndStatusOrderByIdDesc(Long purchaseOrderId, AsnStatus status);
 }

@@ -11,11 +11,15 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface GoodsReceiptRepository extends JpaRepository<GoodsReceipt, Long> {
 
     @EntityGraph(attributePaths = {"purchaseOrder", "supplier", "warehouse"})
     List<GoodsReceipt> findByProcurementOrgIdOrderByIdDesc(Long procurementOrgId);
+
+    @Query("select distinct gr.purchaseOrder.id from GoodsReceipt gr where gr.procurementOrg.id = :oid")
+    Set<Long> findDistinctPurchaseOrderIdsByProcurementOrgId(@Param("oid") Long procurementOrgId);
 
     @EntityGraph(attributePaths = {
             "lines", "lines.purchaseOrderLine", "lines.purchaseOrderLine.material",
