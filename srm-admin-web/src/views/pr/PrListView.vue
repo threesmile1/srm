@@ -30,8 +30,12 @@ async function loadData() {
   rows.value = (await prApi.list(orgId.value)).data
 }
 
-watch(orgId, () => loadData())
-onMounted(async () => { await loadOrgs(); await loadData() })
+/** orgId 由 usePersistedProcurementOrg 在 orgs 加载后恢复；须等 orgId 就绪再拉列表，否则会按 null 提前 return */
+watch(orgId, () => loadData(), { immediate: true })
+
+onMounted(async () => {
+  await loadOrgs()
+})
 
 function goDetail(id: number) { router.push(`/pr/${id}`) }
 </script>

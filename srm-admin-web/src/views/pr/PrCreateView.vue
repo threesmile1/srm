@@ -6,6 +6,7 @@ import { Delete } from '@element-plus/icons-vue'
 import { foundationApi, type OrgUnit, type Warehouse } from '../../api/foundation'
 import { masterApi, type Material, type Supplier } from '../../api/master'
 import { prApi } from '../../api/pr'
+import { PROC_ORG_STORAGE_PREFIX } from '../../composables/usePersistedProcurementOrg'
 import { useMaterialRemoteSelect } from '../../composables/useMaterialRemoteSelect'
 
 const router = useRouter()
@@ -192,6 +193,7 @@ async function save() {
       })),
     })
     ElMessage.success('请购单创建成功: ' + r.data.prNo)
+    sessionStorage.setItem(PROC_ORG_STORAGE_PREFIX + 'pr-list', String(form.value.procurementOrgId))
     router.push(`/pr/${r.data.id}`)
   } catch (e: unknown) {
     const msg = e && typeof e === 'object' && 'response' in e
