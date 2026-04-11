@@ -37,7 +37,7 @@ public class U9MaterialSyncRow {
     @JsonAlias({"supplierCode", "供应商编码", "vendorCode", "lpgys"})
     private String supplierCode;
 
-    @JsonAlias({"supplierName", "供应商名称", "供应商", "vendorName"})
+    @JsonAlias({"supplierName", "gongyingshang", "供应商名称", "供应商", "vendorName"})
     private String supplierName;
 
     /** 帆软：jijiadanwei=计价单位 */

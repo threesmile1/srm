@@ -23,6 +23,7 @@ import {
   Bell,
   ChatDotRound,
   Sell,
+  Box,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { notificationApi } from '../api/notification'
@@ -137,6 +138,10 @@ async function logout() {
             <el-menu-item index="/master/materials">
               <el-icon><Goods /></el-icon>
               <template #title>物料</template>
+            </el-menu-item>
+            <el-menu-item index="/master/warehouses">
+              <el-icon><Box /></el-icon>
+              <template #title>仓库</template>
             </el-menu-item>
           </el-sub-menu>
           <el-sub-menu index="pr" popper-class="zy-menu-popper">

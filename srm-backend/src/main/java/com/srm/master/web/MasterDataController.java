@@ -6,16 +6,22 @@ import com.srm.integration.u9.U9MaterialSyncJobRegistry;
 import com.srm.integration.u9.U9MaterialSyncJobRunner;
 import com.srm.integration.u9.U9MaterialSyncJobStatus;
 import com.srm.integration.u9.U9MaterialSyncRow;
+import com.srm.integration.u9.U9MaterialFactoryWarehouseSyncService;
 import com.srm.integration.u9.U9MaterialSyncService;
+import com.srm.web.error.BadRequestException;
 import com.srm.web.error.NotFoundException;
 import com.srm.master.service.MasterDataImportService;
 import com.srm.master.service.MasterDataImportService.ImportResult;
 import com.srm.master.service.MasterDataService;
+import com.srm.master.service.MaterialDerivedMasterService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,10 +49,23 @@ public class MasterDataController {
     private final U9MaterialSyncService u9MaterialSyncService;
     private final U9MaterialSyncJobRegistry u9MaterialSyncJobRegistry;
     private final U9MaterialSyncJobRunner u9MaterialSyncJobRunner;
+    private final U9MaterialFactoryWarehouseSyncService u9MaterialFactoryWarehouseSyncService;
+    private final MaterialDerivedMasterService materialDerivedMasterService;
 
     @GetMapping("/suppliers")
     public List<SupplierResponse> listSuppliers() {
         return masterDataService.listSuppliers().stream().map(SupplierResponse::from).toList();
+    }
+
+    /**
+     * 物料中出现的供应商（material_item 快照 + material_supplier_u9），用于主数据展示；下单仍用 {@link #listSuppliers()} 主档。
+     */
+    @GetMapping("/suppliers/material-derived")
+    public Page<MaterialDerivedMasterService.MaterialSupplierRefRow> listSuppliersFromMaterials(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        int ps = normalizeMaterialPageSize(size);
+        return materialDerivedMasterService.pageSupplierRefs(PageRequest.of(Math.max(0, page), ps));
     }
 
     @PostMapping("/suppliers")
@@ -68,8 +87,9 @@ public class MasterDataController {
     }
 
     @PostMapping("/materials/import")
+    @SuppressWarnings("unused")
     public ImportResult importMaterials(@RequestParam("file") MultipartFile file) {
-        return importService.importMaterials(file);
+        throw new BadRequestException("物料仅允许通过 U9 同步，不支持 Excel 导入");
     }
 
     /**
@@ -100,15 +120,44 @@ public class MasterDataController {
                 .orElseThrow(() -> new NotFoundException("同步任务不存在: " + jobId));
     }
 
+    /**
+     * 从帆软 cangku_yigui / cangku_shuiqi 同步各厂默认存储仓库（按物料编码匹配本地 material_item）。
+     */
+    @PostMapping("/materials/sync-factory-warehouses-from-u9")
+    public U9MaterialFactoryWarehouseSyncService.FactoryWarehouseSyncResult syncFactoryWarehousesFromU9() {
+        return u9MaterialFactoryWarehouseSyncService.syncFromU9();
+    }
+
+    /**
+     * 物料分页列表（管理端表格）。page 从 0 起；size 仅允许 10 / 20 / 50，默认 10。
+     */
     @GetMapping("/materials")
-    public List<MaterialResponse> listMaterials() {
+    public Page<MaterialResponse> listMaterials(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        int ps = normalizeMaterialPageSize(size);
+        return masterDataService
+                .pageMaterials(PageRequest.of(Math.max(0, page), ps, Sort.by("code").ascending()))
+                .map(MaterialResponse::from);
+    }
+
+    /** 下拉框等需全量物料时使用（无分页） */
+    @GetMapping("/materials/all")
+    public List<MaterialResponse> listAllMaterials() {
         return masterDataService.listMaterials().stream().map(MaterialResponse::from).toList();
     }
 
+    private static int normalizeMaterialPageSize(int size) {
+        if (size == 20 || size == 50) {
+            return size;
+        }
+        return 10;
+    }
+
     @PostMapping("/materials")
+    @SuppressWarnings("unused")
     public MaterialResponse createMaterial(@Valid @RequestBody MaterialCreateRequest req) {
-        MaterialItem m = masterDataService.createMaterial(req.code(), req.name(), req.uom(), req.u9ItemCode());
-        return MaterialResponse.from(m);
+        throw new BadRequestException("物料仅允许通过 U9 同步，不支持在系统中新建");
     }
 
     @PutMapping("/materials/{id}")
@@ -164,6 +213,10 @@ public class MasterDataController {
             String specification,
             BigDecimal purchaseUnitPrice,
             String u9WarehouseName,
+            String warehouseSuzhou,
+            String warehouseChengdu,
+            String warehouseHuanan,
+            String warehouseShuiqi,
             String u9SupplierCode,
             String u9SupplierName
     ) {
@@ -177,6 +230,10 @@ public class MasterDataController {
                     m.getSpecification(),
                     m.getPurchaseUnitPrice(),
                     m.getU9WarehouseName(),
+                    m.getWarehouseSuzhou(),
+                    m.getWarehouseChengdu(),
+                    m.getWarehouseHuanan(),
+                    m.getWarehouseShuiqi(),
                     m.getU9SupplierCode(),
                     m.getU9SupplierName());
         }

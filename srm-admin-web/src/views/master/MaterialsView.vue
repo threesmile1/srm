@@ -1,81 +1,71 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Upload as UploadIcon } from '@element-plus/icons-vue'
 import axios from 'axios'
-import { masterApi, type Material, type ImportResult, type U9MaterialSyncResult } from '../../api/master'
+import {
+  masterApi,
+  type Material,
+  type U9MaterialSyncResult,
+  type FactoryWarehouseSyncResult,
+} from '../../api/master'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
 const rows = ref<Material[]>([])
+/** 表格分页：与 el-pagination 一致为 1 基；请求 API 时减 1 */
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+
 const dialog = ref(false)
 const editing = ref<Material | null>(null)
-const form = ref({ code: '', name: '', uom: '', u9ItemCode: '' })
-
-const importDialogVisible = ref(false)
-const importResult = ref<ImportResult | null>(null)
-const importing = ref(false)
+const form = ref({ name: '', uom: '', u9ItemCode: '' })
 
 const u9Syncing = ref(false)
 const u9SyncResult = ref<U9MaterialSyncResult | null>(null)
 const u9SyncDialogVisible = ref(false)
 
+const factoryWhSyncing = ref(false)
+const factoryWhResult = ref<FactoryWarehouseSyncResult | null>(null)
+const factoryWhDialogVisible = ref(false)
+
 async function load() {
-  const r = await masterApi.listMaterials()
-  rows.value = r.data
+  const r = await masterApi.listMaterials({
+    page: currentPage.value - 1,
+    size: pageSize.value,
+  })
+  rows.value = r.data.content
+  total.value = r.data.totalElements
 }
 
-function openCreate() {
-  editing.value = null
-  form.value = { code: '', name: '', uom: 'PCS', u9ItemCode: '' }
-  dialog.value = true
+function onPageChange() {
+  load()
+}
+
+function onSizeChange() {
+  currentPage.value = 1
+  load()
 }
 
 function openEdit(row: Material) {
   editing.value = row
-  form.value = { code: row.code, name: row.name, uom: row.uom, u9ItemCode: row.u9ItemCode || '' }
+  form.value = { name: row.name, uom: row.uom, u9ItemCode: row.u9ItemCode || '' }
   dialog.value = true
 }
 
 async function save() {
+  if (!editing.value) return
   try {
-    if (editing.value) {
-      await masterApi.updateMaterial(editing.value.id, {
-        name: form.value.name,
-        uom: form.value.uom,
-        u9ItemCode: form.value.u9ItemCode || undefined,
-      })
-    } else {
-      await masterApi.createMaterial({
-        code: form.value.code,
-        name: form.value.name,
-        uom: form.value.uom,
-        u9ItemCode: form.value.u9ItemCode || undefined,
-      })
-    }
+    await masterApi.updateMaterial(editing.value.id, {
+      name: form.value.name,
+      uom: form.value.uom,
+      u9ItemCode: form.value.u9ItemCode || undefined,
+    })
     ElMessage.success('已保存')
     dialog.value = false
     await load()
   } catch (e: unknown) {
     const msg = e && typeof e === 'object' && 'response' in e ? (e as { response?: { data?: { error?: string } } }).response?.data?.error : ''
     ElMessage.error(msg || '操作失败')
-  }
-}
-
-async function handleImport(uploadFile: { raw: File }) {
-  importing.value = true
-  importResult.value = null
-  try {
-    const r = await masterApi.importMaterials(uploadFile.raw)
-    importResult.value = r.data
-    if (r.data.errors.length === 0) {
-      ElMessage.success(`导入完成：新增 ${r.data.created}，更新 ${r.data.updated}`)
-      importDialogVisible.value = false
-    }
-    await load()
-  } catch {
-    ElMessage.error('导入失败')
-  } finally {
-    importing.value = false
   }
 }
 
@@ -136,6 +126,36 @@ async function syncFromU9() {
   }
 }
 
+/** 帆软 cangku_yigui / cangku_shuiqi → 四厂默认存储仓库 */
+async function syncFactoryWarehousesFromU9() {
+  factoryWhSyncing.value = true
+  factoryWhResult.value = null
+  try {
+    const r = await masterApi.syncFactoryWarehousesFromU9()
+    factoryWhResult.value = r.data
+    factoryWhDialogVisible.value = true
+    const errN = r.data.errors.length
+    if (errN === 0) {
+      ElMessage.success(
+        `四厂仓库已同步：衣柜表 ${r.data.yiguiUpdated}/${r.data.yiguiRows}，水漆 ${r.data.shuiqiUpdated}/${r.data.shuiqiRows}`,
+      )
+    } else {
+      ElMessage.warning(`已写入，另有 ${errN} 条提示（如无此料号等），请查看详情`)
+    }
+    await load()
+  } catch (e: unknown) {
+    let msg = ''
+    if (axios.isAxiosError(e)) {
+      msg = (e.response?.data as { error?: string } | undefined)?.error ?? e.message
+    } else if (e && typeof e === 'object' && 'message' in e) {
+      msg = String((e as { message: string }).message)
+    }
+    ElMessage.error(msg || '同步失败')
+  } finally {
+    factoryWhSyncing.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -143,12 +163,14 @@ onMounted(load)
   <div class="page">
     <div class="toolbar">
       <span class="title">物料</span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <el-button type="primary" @click="openCreate">新建</el-button>
-        <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <el-button :loading="u9Syncing" @click="syncFromU9">从 U9 同步（后台分页）</el-button>
+        <el-button :loading="factoryWhSyncing" @click="syncFactoryWarehousesFromU9"
+          >同步四厂仓库（yigui / shuiqi）</el-button
+        >
       </div>
     </div>
+    <p class="hint">物料仅能通过 U9 同步写入系统，不支持新建或 Excel 导入。</p>
     <el-table :data="rows" stripe>
       <template #empty>
         <DataTableEmpty />
@@ -158,7 +180,11 @@ onMounted(load)
       <el-table-column prop="specification" label="规格" width="120" show-overflow-tooltip />
       <el-table-column prop="uom" label="单位" width="72" />
       <el-table-column prop="purchaseUnitPrice" label="参考单价" width="100" />
-      <el-table-column prop="u9WarehouseName" label="仓库" width="110" show-overflow-tooltip />
+      <el-table-column prop="u9WarehouseName" label="仓库(U9)" width="110" show-overflow-tooltip />
+      <el-table-column prop="warehouseSuzhou" label="苏州仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="warehouseChengdu" label="成都仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="warehouseHuanan" label="华南仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="warehouseShuiqi" label="水漆仓" width="100" show-overflow-tooltip />
       <el-table-column prop="u9SupplierName" label="供应商" min-width="120" show-overflow-tooltip />
       <el-table-column prop="u9SupplierCode" label="供应商编码" width="110" show-overflow-tooltip />
       <el-table-column prop="u9ItemCode" label="U9 料号" width="110" />
@@ -169,10 +195,23 @@ onMounted(load)
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialog" :title="editing ? '编辑物料' : '新建物料'" width="480px">
+    <div class="pager-wrap">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50]"
+        :total="total"
+        layout="total, sizes, prev, pager, next, jumper"
+        background
+        @current-change="onPageChange"
+        @size-change="onSizeChange"
+      />
+    </div>
+
+    <el-dialog v-model="dialog" title="编辑物料" width="480px">
       <el-form label-width="100px">
-        <el-form-item v-if="!editing" label="编码">
-          <el-input v-model="form.code" />
+        <el-form-item label="编码">
+          <el-input :model-value="editing?.code" disabled />
         </el-form-item>
         <el-form-item label="名称">
           <el-input v-model="form.name" />
@@ -189,36 +228,21 @@ onMounted(load)
         <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="importDialogVisible" title="Excel 导入物料" width="560px">
-      <div class="import-hint">
-        <p>Excel 模板列顺序：<b>编码 | 名称 | 单位 | U9料号</b></p>
-        <p>第一行为表头（将跳过），编码已存在则更新。</p>
-      </div>
-      <el-upload
-        drag
-        :auto-upload="false"
-        accept=".xlsx,.xls"
-        :limit="1"
-        :on-change="handleImport"
-        :disabled="importing"
-        :show-file-list="false"
-      >
-        <div style="padding:20px 0">
-          <el-icon style="font-size:40px;color:var(--el-color-primary)"><UploadIcon /></el-icon>
-          <div style="margin-top:8px">{{ importing ? '导入中...' : '点击或拖拽上传 Excel 文件' }}</div>
-        </div>
-      </el-upload>
-      <div v-if="importResult" class="import-result">
-        <el-descriptions :column="4" border size="small">
-          <el-descriptions-item label="总行数">{{ importResult.total }}</el-descriptions-item>
-          <el-descriptions-item label="新增">{{ importResult.created }}</el-descriptions-item>
-          <el-descriptions-item label="更新">{{ importResult.updated }}</el-descriptions-item>
-          <el-descriptions-item label="跳过">{{ importResult.skipped }}</el-descriptions-item>
+
+    <el-dialog v-model="factoryWhDialogVisible" title="四厂仓库同步结果" width="560px">
+      <div v-if="factoryWhResult" class="import-result">
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="衣柜报表行数">{{ factoryWhResult.yiguiRows }}</el-descriptions-item>
+          <el-descriptions-item label="衣柜已更新">{{ factoryWhResult.yiguiUpdated }}</el-descriptions-item>
+          <el-descriptions-item label="衣柜跳过">{{ factoryWhResult.yiguiSkipped }}</el-descriptions-item>
+          <el-descriptions-item label="水漆报表行数">{{ factoryWhResult.shuiqiRows }}</el-descriptions-item>
+          <el-descriptions-item label="水漆已更新">{{ factoryWhResult.shuiqiUpdated }}</el-descriptions-item>
+          <el-descriptions-item label="水漆跳过">{{ factoryWhResult.shuiqiSkipped }}</el-descriptions-item>
         </el-descriptions>
-        <div v-if="importResult.errors.length" class="import-errors">
-          <p style="font-weight:600;color:var(--el-color-danger);margin:12px 0 4px">错误明细：</p>
+        <div v-if="factoryWhResult.errors.length" class="import-errors">
+          <p style="font-weight:600;color:var(--el-color-warning);margin:12px 0 4px">提示：</p>
           <ul>
-            <li v-for="(err, i) in importResult.errors" :key="i">{{ err }}</li>
+            <li v-for="(err, i) in factoryWhResult.errors" :key="i">{{ err }}</li>
           </ul>
         </div>
       </div>
@@ -226,11 +250,17 @@ onMounted(load)
 
     <el-dialog v-model="u9SyncDialogVisible" title="U9 物料同步结果" width="560px">
       <div v-if="u9SyncResult" class="import-result">
-        <el-descriptions :column="4" border size="small">
+        <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="总行数">{{ u9SyncResult.total }}</el-descriptions-item>
           <el-descriptions-item label="新增">{{ u9SyncResult.created }}</el-descriptions-item>
           <el-descriptions-item label="更新">{{ u9SyncResult.updated }}</el-descriptions-item>
           <el-descriptions-item label="跳过">{{ u9SyncResult.skipped }}</el-descriptions-item>
+          <el-descriptions-item label="lpgys 料号请求">{{
+            u9SyncResult.lpgysMaterialsTried ?? 0
+          }}</el-descriptions-item>
+          <el-descriptions-item label="供应商行写入">{{
+            u9SyncResult.lpgysSupplierLinksUpserted ?? 0
+          }}</el-descriptions-item>
         </el-descriptions>
         <div v-if="u9SyncResult.errors.length" class="import-errors">
           <p style="font-weight:600;color:var(--el-color-warning);margin:12px 0 4px">行级提示：</p>
@@ -251,19 +281,17 @@ onMounted(load)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 .title {
   font-size: 18px;
   font-weight: 600;
 }
-.import-hint {
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
+.hint {
   font-size: 13px;
-  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+  margin: 0 0 16px;
+  line-height: 1.5;
 }
 .import-result {
   margin-top: 16px;
@@ -274,5 +302,10 @@ onMounted(load)
   padding-left: 20px;
   font-size: 13px;
   color: var(--el-color-danger);
+}
+.pager-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

@@ -6,11 +6,16 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.srm.config.SrmProperties;
+import com.srm.master.domain.MaterialItem;
+import com.srm.master.repo.MaterialItemRepository;
 import com.srm.web.error.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -31,12 +36,31 @@ import java.util.Map;
 public class U9MaterialSyncService {
 
     private final SrmProperties properties;
+    private final U9DecisionClient u9DecisionClient;
     private final U9MaterialRowWriter materialRowWriter;
+    private final MaterialItemRepository materialItemRepository;
+    private final U9MaterialSupplierWriter materialSupplierWriter;
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    public record U9MaterialSyncResult(int total, int created, int updated, int skipped, List<String> errors) {}
+    /**
+     * @param lpgysMaterialsTried   调用 lpgys 的物料条数（每料号一次）
+     * @param lpgysSupplierLinksUpserted 写入 material_supplier_u9 的行数（多供应商可大于 tried）
+     */
+    public record U9MaterialSyncResult(
+            int total,
+            int created,
+            int updated,
+            int skipped,
+            List<String> errors,
+            int lpgysMaterialsTried,
+            int lpgysSupplierLinksUpserted
+    ) {
+        public U9MaterialSyncResult(int total, int created, int updated, int skipped, List<String> errors) {
+            this(total, created, updated, skipped, errors, 0, 0);
+        }
+    }
 
     /**
      * 从配置拉取并落库（需 srm.u9.enabled=true）。
@@ -62,7 +86,113 @@ public class U9MaterialSyncService {
             }
             rows = parseMaterialRowsFromResponse(raw);
         }
-        return apply(rows);
+        U9MaterialSyncResult materialResult = apply(rows);
+        if (!shouldSyncLpgys(u9)) {
+            return materialResult;
+        }
+        return mergeLpgysPhase(u9, materialResult);
+    }
+
+    private static boolean shouldSyncLpgys(SrmProperties.U9 u9) {
+        return u9.isSyncSuppliersFromLpgys()
+                && StringUtils.hasText(u9.getDecisionApiUrl())
+                && StringUtils.hasText(u9.getSupplierReportPath());
+    }
+
+    private U9MaterialSyncResult mergeLpgysPhase(SrmProperties.U9 u9, U9MaterialSyncResult materialResult) {
+        List<String> allErrors = new ArrayList<>(materialResult.errors());
+        int tried = 0;
+        int linksUpserted = 0;
+        String reportPath = u9.getSupplierReportPath().trim();
+        int p = 0;
+        final int pageSize = 300;
+        while (true) {
+            Page<MaterialItem> chunk = materialItemRepository.findAll(
+                    PageRequest.of(p, pageSize, Sort.by("id").ascending()));
+            if (chunk.isEmpty()) {
+                break;
+            }
+            for (MaterialItem m : chunk.getContent()) {
+                if (m == null || !StringUtils.hasText(m.getCode())) {
+                    continue;
+                }
+                tried++;
+                try {
+                    String raw = u9DecisionClient.postDecision(u9, reportPath, buildLpgysParameters(m.getCode()), 1, -1);
+                    if (raw == null || raw.isBlank()) {
+                        allErrors.add("lpgys 料号 " + m.getCode() + "：接口返回空");
+                        continue;
+                    }
+                    List<U9LpgysSupplierRow> supplierRows = parseLpgysRowsFromResponse(raw);
+                    U9MaterialSupplierWriter.Outcome o = materialSupplierWriter.replaceSuppliersForMaterial(
+                            m.getId(), supplierRows);
+                    linksUpserted += o.linksSaved();
+                } catch (Exception e) {
+                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    allErrors.add("lpgys 料号 " + m.getCode() + "：" + msg);
+                    log.warn("lpgys 同步失败 code={}", m.getCode(), e);
+                }
+            }
+            if (!chunk.hasNext()) {
+                break;
+            }
+            p++;
+        }
+        log.info("U9 lpgys 供应商同步完成：物料请求={} 供应商行写入≈{}（含多行）", tried, linksUpserted);
+        return new U9MaterialSyncResult(
+                materialResult.total(),
+                materialResult.created(),
+                materialResult.updated(),
+                materialResult.skipped(),
+                List.copyOf(allErrors),
+                tried,
+                linksUpserted);
+    }
+
+    private static List<Map<String, Object>> buildLpgysParameters(String materialCode) {
+        List<Map<String, Object>> parameters = new ArrayList<>();
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", "code");
+        p.put("type", "String");
+        p.put("value", materialCode != null ? materialCode : "");
+        parameters.add(p);
+        return parameters;
+    }
+
+    /**
+     * 解析 lpgys 返回（与 wuliao 相同 envelope：data 对象数组或 data.rows 等）。
+     */
+    List<U9LpgysSupplierRow> parseLpgysRowsFromResponse(String json) {
+        try {
+            String trimmed = json.trim();
+            if (trimmed.startsWith("\uFEFF")) {
+                trimmed = trimmed.substring(1);
+            }
+            if (trimmed.startsWith("<") || trimmed.regionMatches(true, 0, "<!DOCTYPE", 0, 9)) {
+                throw new BadRequestException("lpgys 接口返回了 HTML 而非 JSON");
+            }
+            JsonNode root = MAPPER.readTree(trimmed);
+            FineReportJson.assertSuccess(root);
+            if (root.has("data") && root.get("data").isTextual()) {
+                String inner = root.get("data").asText().trim();
+                if (inner.startsWith("[") || inner.startsWith("{")) {
+                    return parseLpgysRowsFromResponse(inner);
+                }
+            }
+            JsonNode array = FineReportJson.locateObjectRowArray(root);
+            if (array == null || !array.isArray()) {
+                throw new BadRequestException("lpgys 响应中未找到供应商对象数组");
+            }
+            List<U9LpgysSupplierRow> out = new ArrayList<>();
+            for (JsonNode row : array) {
+                if (row != null && row.isObject()) {
+                    out.add(MAPPER.convertValue(row, U9LpgysSupplierRow.class));
+                }
+            }
+            return out;
+        } catch (JsonProcessingException e) {
+            throw new BadRequestException("解析 lpgys JSON 失败: " + e.getOriginalMessage());
+        }
     }
 
     /**
@@ -125,45 +255,8 @@ public class U9MaterialSyncService {
     }
 
     private String postFineReportDecisionPage(SrmProperties.U9 u9, int pageNumber, int pageSize) {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("report_path", StringUtils.hasText(u9.getReportPath()) ? u9.getReportPath() : "API/wuliao.cpt");
-        body.put("datasource_name", StringUtils.hasText(u9.getDatasourceName()) ? u9.getDatasourceName() : "ds1");
-        body.put("page_number", pageNumber);
-        body.put("page_size", pageSize);
-        body.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        body.put("parameters", buildFineReportParameters(u9));
-
-        final String jsonBody;
-        try {
-            jsonBody = MAPPER.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
-            throw new BadRequestException("构建帆软请求体失败: " + e.getMessage());
-        }
-
-        try {
-            RestClient client = RestClient.builder()
-                    .requestFactory(u9HttpRequestFactory(u9))
-                    .build();
-            var spec = client.post()
-                    .uri(u9.getDecisionApiUrl().trim())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .body(jsonBody);
-            if (StringUtils.hasText(u9.getHttpUser())) {
-                spec = spec.headers(h -> h.setBasicAuth(u9.getHttpUser(), passwordOrEmpty(u9.getHttpPassword()),
-                        StandardCharsets.UTF_8));
-            }
-            return spec.retrieve().body(String.class);
-        } catch (RestClientResponseException e) {
-            String errPayload = e.getResponseBodyAsString();
-            String hint = errPayload != null && !errPayload.isBlank()
-                    ? truncateForMessage(errPayload, 800)
-                    : "";
-            throw new BadRequestException("帆软 Decision HTTP " + e.getStatusCode().value()
-                    + (hint.isEmpty() ? ": " + e.getMessage() : "，响应: " + hint));
-        } catch (RestClientException e) {
-            throw new BadRequestException("帆软 Decision 接口请求失败: " + e.getMessage());
-        }
+        String path = StringUtils.hasText(u9.getReportPath()) ? u9.getReportPath() : "API/wuliao.cpt";
+        return u9DecisionClient.postDecision(u9, path, buildFineReportParameters(u9), pageNumber, pageSize);
     }
 
     private static List<Map<String, Object>> buildFineReportParameters(SrmProperties.U9 u9) {
@@ -305,7 +398,7 @@ public class U9MaterialSyncService {
                 throw new BadRequestException("接口返回了 HTML 而非 JSON（多为登录页、404 或网关拦截），请检查 URL、鉴权与 VPN");
             }
             JsonNode root = MAPPER.readTree(trimmed);
-            assertFineReportSuccess(root);
+            FineReportJson.assertSuccess(root);
             // 帆软偶发将 data 再包一层 JSON 字符串
             if (root.has("data") && root.get("data").isTextual()) {
                 String inner = root.get("data").asText().trim();
@@ -325,41 +418,6 @@ public class U9MaterialSyncService {
         } catch (JsonProcessingException e) {
             throw new BadRequestException("解析物料 JSON 失败: " + e.getOriginalMessage());
         }
-    }
-
-    /**
-     * 帆软 Decision 数据接口：{@code err_code==0} 为成功，否则 {@code err_msg} 为原因（见官方文档）。
-     */
-    private static void assertFineReportSuccess(JsonNode root) {
-        if (root == null || !root.isObject()) {
-            return;
-        }
-        JsonNode errCode = root.get("err_code");
-        if (errCode == null || errCode.isNull()) {
-            errCode = root.get("errorCode");
-        }
-        if (errCode == null || errCode.isNull()) {
-            return;
-        }
-        boolean ok = false;
-        if (errCode.isNumber()) {
-            ok = errCode.asDouble() == 0.0;
-        } else if (errCode.isTextual()) {
-            String t = errCode.asText().trim();
-            ok = "0".equals(t) || "200".equals(t);
-        }
-        if (ok) {
-            return;
-        }
-        String msg = "";
-        if (root.has("err_msg") && !root.get("err_msg").isNull()) {
-            msg = root.get("err_msg").asText();
-        } else if (root.has("errorMsg") && !root.get("errorMsg").isNull()) {
-            msg = root.get("errorMsg").asText();
-        } else if (root.has("message") && !root.get("message").isNull()) {
-            msg = root.get("message").asText();
-        }
-        throw new BadRequestException("帆软接口返回失败 err_code=" + errCode + (msg.isBlank() ? "" : "：" + msg));
     }
 
     /**

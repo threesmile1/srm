@@ -17,4 +17,10 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, Long> {
     boolean existsByLedgerAndCode(Ledger ledger, String code);
 
     Optional<OrgUnit> findByCode(String code);
+
+    Optional<OrgUnit> findFirstByOrgTypeAndU9OrgCode(OrgUnitType orgType, String u9OrgCode);
+
+    Optional<OrgUnit> findFirstByOrgTypeAndCode(OrgUnitType orgType, String code);
+
+    Optional<OrgUnit> findFirstByOrgTypeAndName(OrgUnitType orgType, String name);
 }

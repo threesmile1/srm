@@ -33,7 +33,7 @@ async function loadOrgs() {
 }
 
 async function loadMaster() {
-  const [s, m] = await Promise.all([masterApi.listSuppliers(), masterApi.listMaterials()])
+  const [s, m] = await Promise.all([masterApi.listSuppliers(), masterApi.listAllMaterialsForSelect()])
   suppliers.value = s.data
   materials.value = m.data
   if (s.data.length) supplierId.value = s.data[0].id

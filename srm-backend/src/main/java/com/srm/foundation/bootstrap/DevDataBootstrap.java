@@ -12,13 +12,8 @@ import com.srm.foundation.repo.RoleRepository;
 import com.srm.foundation.repo.UserAccountRepository;
 import com.srm.foundation.repo.WarehouseRepository;
 import com.srm.master.domain.Supplier;
-import com.srm.approval.domain.StepAction;
-import com.srm.approval.service.ApprovalService;
 import com.srm.master.repo.SupplierRepository;
 import com.srm.master.service.MasterDataService;
-import com.srm.po.domain.PoStatus;
-import com.srm.po.service.PurchaseOrderService;
-import com.srm.po.service.PurchaseOrderService.CreateLine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -29,13 +24,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * dev 环境示例数据：账套/组织/仓库/用户 → 主数据 → 演示采购订单（已发布）。
+ * dev 环境示例数据：账套/组织/仓库/用户、演示供应商与门户账号。物料请通过管理端 U9 同步，不再预置演示物料/订单。
  */
 @Slf4j
 @Component
@@ -52,8 +46,6 @@ public class DevDataBootstrap implements ApplicationRunner {
     private final PasswordEncoder passwordEncoder;
     private final SupplierRepository supplierRepository;
     private final MasterDataService masterDataService;
-    private final PurchaseOrderService purchaseOrderService;
-    private final ApprovalService approvalService;
 
     @Override
     @Transactional
@@ -119,14 +111,11 @@ public class DevDataBootstrap implements ApplicationRunner {
     }
 
     private void seedMasterAndDemoPo() {
-        log.info("Seeding dev master data + demo PO...");
+        log.info("Seeding dev master data (supplier + portal)...");
 
         Ledger ledger = ledgerRepository.findByCode("LEDGER01").orElseThrow();
         List<OrgUnit> procs = orgUnitRepository.findByLedgerAndOrgTypeOrderByCodeAsc(ledger, OrgUnitType.PROCUREMENT);
         Set<Long> procIds = procs.stream().map(OrgUnit::getId).collect(Collectors.toSet());
-        OrgUnit p01 = procs.stream().filter(o -> "P01".equals(o.getCode())).findFirst().orElseThrow();
-        Warehouse whP01 = warehouseRepository.findByProcurementOrgOrderByCodeAsc(p01).get(0);
-
         Supplier supplier = masterDataService.createSupplier(
                 "S001",
                 "演示供应商",
@@ -134,9 +123,6 @@ public class DevDataBootstrap implements ApplicationRunner {
                 null,
                 procIds
         );
-
-        var m1 = masterDataService.createMaterial("M001", "演示物料A", "PCS", "U9-M001");
-        masterDataService.createMaterial("M002", "演示物料B", "KG", "U9-M002");
 
         UserAccount portal = new UserAccount();
         portal.setUsername("portal");
@@ -146,36 +132,6 @@ public class DevDataBootstrap implements ApplicationRunner {
         portal.setSupplier(supplier);
         userAccountRepository.save(portal);
 
-        var po = purchaseOrderService.create(
-                p01.getId(),
-                supplier.getId(),
-                "CNY",
-                "dev 演示订单",
-                List.of(new CreateLine(
-                        m1.getId(),
-                        whP01.getId(),
-                        new BigDecimal("100"),
-                        "PCS",
-                        new BigDecimal("12.50"),
-                        null
-                ))
-        );
-        purchaseOrderService.submitForApproval(po.getId());
-        po = purchaseOrderService.requireDetail(po.getId());
-        if (po.getStatus() == PoStatus.PENDING_APPROVAL) {
-            var inst = approvalService.getInstanceByDoc("PO", po.getId());
-            if (inst != null) {
-                approvalService.processAction(inst.getId(), StepAction.APPROVED,
-                        null, "dev-seed", "开发环境自动审批");
-            }
-            po = purchaseOrderService.requireDetail(po.getId());
-        }
-        if (po.getStatus() == PoStatus.APPROVED) {
-            purchaseOrderService.release(po.getId());
-        } else {
-            log.warn("演示订单未处于已审核状态({})，跳过发布", po.getStatus());
-        }
-
-        log.info("Master + PO seed done. portal / portal123 ; supplierId={} ; demo PO {}", supplier.getId(), po.getId());
+        log.info("Dev master seed done. portal / portal123 ; supplierId={}. 物料请通过管理端 U9 同步写入，不再预置演示物料/订单。", supplier.getId());
     }
 }

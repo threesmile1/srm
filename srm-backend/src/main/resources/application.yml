@@ -53,6 +53,15 @@ srm:
     # datasource-name: ds1
     # page-number: 1
     # page-size: -1
+    # 料品供应商 lpgys.cpt（默认关闭；供应商展示以物料表为准，见 GET /suppliers/material-derived）
+    # supplier-report-path: API/lpgys.cpt
+    # sync-suppliers-from-lpgys: false
+    # 仓库 cangku.cpt（parameters: name=cangku, value 空串）
+    # warehouse-report-path: API/cangku.cpt
+    # 物料四厂默认仓：cangku_yigui（苏州/成都/华南）+ cangku_shuiqi（水漆）；parameters 默认同 liaohao 空串全量
+    # material-yigui-report-path: API/cangku_yigui.cpt
+    # material-shuiqi-report-path: API/cangku_shuiqi.cpt
+    # material-factory-warehouse-parameters: []
     # fine-report-parameters:
     #   - name: pinming
     #     type: String

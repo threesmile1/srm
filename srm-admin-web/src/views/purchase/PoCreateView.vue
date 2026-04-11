@@ -27,7 +27,7 @@ async function loadBase() {
     if (orgs.value.length) procurementOrgId.value = orgs.value[0].id
   }
   suppliers.value = (await masterApi.listSuppliers()).data
-  materials.value = (await masterApi.listMaterials()).data
+  materials.value = (await masterApi.listAllMaterialsForSelect()).data
   if (suppliers.value.length) supplierId.value = suppliers.value[0].id
 }
 

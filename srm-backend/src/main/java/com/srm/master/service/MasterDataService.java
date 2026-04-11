@@ -11,6 +11,8 @@ import com.srm.master.repo.SupplierRepository;
 import com.srm.web.error.BadRequestException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,6 +83,11 @@ public class MasterDataService {
     @Transactional(readOnly = true)
     public List<MaterialItem> listMaterials() {
         return materialItemRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<MaterialItem> pageMaterials(Pageable pageable) {
+        return materialItemRepository.findAll(pageable);
     }
 
     @Transactional(readOnly = true)

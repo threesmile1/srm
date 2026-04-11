@@ -74,6 +74,35 @@ public class SrmProperties {
         private String baseUrl = "";
         /** 相对路径，默认报表/API 名 wuliao.cpt */
         private String materialApiPath = "wuliao.cpt";
+
+        /**
+         * 物料供应商报表（lpgys.cpt），与 wuliao 共用 decision-api-url，POST body 中
+         * report_path 用本字段；parameters 为一条 name=code、value=料号。
+         */
+        private String supplierReportPath = "API/lpgys.cpt";
+
+        /**
+         * 在 wuliao 物料落库完成后，是否按每条物料编码调用 lpgys 拉取供应商并写入 material_supplier_u9。
+         * 关闭则仅同步物料主数据。
+         */
+        private boolean syncSuppliersFromLpgys = false;
+
+        /** 仓库 cangku.cpt，与 wuliao 共用 decision-api-url */
+        private String warehouseReportPath = "API/cangku.cpt";
+
+        /**
+         * 料号-多厂仓库（衣柜等）：liaohao + cangku_suzhou/cangku_chengdu/cangku_huanan。
+         */
+        private String materialYiguiReportPath = "API/cangku_yigui.cpt";
+
+        /** 料号-水漆厂仓库：liaohao + cangku_shuiqi（cangku_shuiqi.cpt） */
+        private String materialShuiqiReportPath = "API/cangku_shuiqi.cpt";
+
+        /**
+         * 上述两报表的帆软 parameters；空则默认一条 name=liaohao、value 空串（全量）。
+         */
+        private List<FineReportParameter> materialFactoryWarehouseParameters = new ArrayList<>();
+
         private String httpUser = "";
         private String httpPassword = "";
 

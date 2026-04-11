@@ -44,7 +44,7 @@ async function loadWarehouses() {
 onMounted(async () => {
   await loadOrgs()
   await loadWarehouses()
-  materials.value = (await masterApi.listMaterials()).data
+  materials.value = (await masterApi.listAllMaterialsForSelect()).data
   suppliers.value = (await masterApi.listSuppliers()).data
 })
 

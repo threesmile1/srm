@@ -29,6 +29,10 @@ public class Warehouse extends BaseEntity {
     @Column(nullable = false, length = 255)
     private String name;
 
+    /** U9 cangku.cpt：工厂/品类 */
+    @Column(name = "u9_gongchang", length = 255)
+    private String u9Gongchang;
+
     @Column(name = "u9_wh_code", length = 64)
     private String u9WhCode;
 }

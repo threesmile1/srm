@@ -5,6 +5,7 @@ import LoginView from '../views/LoginView.vue'
 import HomeView from '../views/HomeView.vue'
 import SuppliersView from '../views/master/SuppliersView.vue'
 import MaterialsView from '../views/master/MaterialsView.vue'
+import WarehousesView from '../views/master/WarehousesView.vue'
 import PoListView from '../views/purchase/PoListView.vue'
 import PoCreateView from '../views/purchase/PoCreateView.vue'
 import PoDetailView from '../views/purchase/PoDetailView.vue'
@@ -46,6 +47,7 @@ const router = createRouter({
         { path: 'home', name: 'home', component: HomeView, meta: { title: '工作台' } },
         { path: 'master/suppliers', name: 'suppliers', component: SuppliersView, meta: { title: '供应商' } },
         { path: 'master/materials', name: 'materials', component: MaterialsView, meta: { title: '物料' } },
+        { path: 'master/warehouses', name: 'warehouses', component: WarehousesView, meta: { title: '仓库' } },
         { path: 'pr', name: 'pr-list', component: PrListView, meta: { title: '请购单' } },
         { path: 'pr/new', name: 'pr-new', component: PrCreateView, meta: { title: '新建请购' } },
         { path: 'pr/:id', name: 'pr-detail', component: PrDetailView, meta: { title: '请购详情' } },

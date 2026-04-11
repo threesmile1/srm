@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload as UploadIcon } from '@element-plus/icons-vue'
-import { masterApi, type Supplier, type ImportResult } from '../../api/master'
+import { masterApi, type Supplier, type ImportResult, type MaterialSupplierRef } from '../../api/master'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { supplierLifecycleApi, type SupplierAuditItem } from '../../api/supplier'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
@@ -24,6 +24,13 @@ const LIFECYCLE_OPTIONS = [
   { value: 'BLACKLISTED', label: '黑名单' },
   { value: 'ELIMINATED', label: '淘汰' },
 ]
+
+const mainTab = ref<'mat' | 'sys'>('mat')
+
+const matRows = ref<MaterialSupplierRef[]>([])
+const matPage = ref(1)
+const matPageSize = ref(10)
+const matTotal = ref(0)
 
 const rows = ref<Supplier[]>([])
 const orgOptions = ref<OrgUnit[]>([])
@@ -57,6 +64,24 @@ const auditForm = ref({
   auditorName: '',
   remark: '',
 })
+
+async function loadMaterialRefs() {
+  const r = await masterApi.listSuppliersMaterialDerived({
+    page: matPage.value - 1,
+    size: matPageSize.value,
+  })
+  matRows.value = r.data.content
+  matTotal.value = r.data.totalElements
+}
+
+function onMatPageChange() {
+  loadMaterialRefs()
+}
+
+function onMatSizeChange() {
+  matPage.value = 1
+  loadMaterialRefs()
+}
 
 async function load() {
   const [s, ledgers] = await Promise.all([masterApi.listSuppliers(), foundationApi.listLedgers()])
@@ -113,6 +138,7 @@ async function save() {
     }
     dialog.value = false
     await load()
+    await loadMaterialRefs()
   } catch (e: unknown) {
     const msg = e && typeof e === 'object' && 'response' in e ? (e as { response?: { data?: { error?: string } } }).response?.data?.error : ''
     ElMessage.error(msg || '操作失败')
@@ -130,6 +156,7 @@ async function handleImport(uploadFile: { raw: File }) {
       importDialogVisible.value = false
     }
     await load()
+    await loadMaterialRefs()
   } catch {
     ElMessage.error('导入失败')
   } finally {
@@ -158,6 +185,7 @@ async function saveLifecycle() {
     lifecycleDialog.value = false
     lifecycleRow.value = null
     await load()
+    await loadMaterialRefs()
   } catch (e: unknown) {
     const msg =
       e && typeof e === 'object' && 'response' in e
@@ -216,18 +244,50 @@ async function addAudit() {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await Promise.all([loadMaterialRefs(), load()])
+})
 </script>
 
 <template>
   <div class="page">
     <div class="toolbar">
       <span class="title">供应商</span>
-      <div style="display:flex;gap:8px">
-        <el-button type="primary" @click="openCreate">新建</el-button>
-        <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
-      </div>
     </div>
+    <el-tabs v-model="mainTab">
+      <el-tab-pane label="物料中的供应商" name="mat">
+        <p class="tab-hint">
+          来自物料主数据中的供应商编码/名称及多供应商表；不再从 U9 lpgys 单独同步。新建订单等仍使用「系统供应商主档」中的记录。
+        </p>
+        <el-table :data="matRows" stripe>
+          <template #empty>
+            <DataTableEmpty />
+          </template>
+          <el-table-column prop="supplierCode" label="供应商编码" width="140" />
+          <el-table-column prop="supplierName" label="名称" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="refCount" label="引用计数" width="100" />
+        </el-table>
+        <div class="pager-wrap">
+          <el-pagination
+            v-model:current-page="matPage"
+            v-model:page-size="matPageSize"
+            :page-sizes="[10, 20, 50]"
+            :total="matTotal"
+            layout="total, sizes, prev, pager, next, jumper"
+            background
+            @current-change="onMatPageChange"
+            @size-change="onMatSizeChange"
+          />
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="系统供应商主档（下单用）" name="sys">
+        <div class="toolbar inner">
+          <span />
+          <div style="display:flex;gap:8px">
+            <el-button type="primary" @click="openCreate">新建</el-button>
+            <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
+          </div>
+        </div>
     <el-table :data="rows" stripe>
       <template #empty>
         <DataTableEmpty />
@@ -248,6 +308,8 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+      </el-tab-pane>
+    </el-tabs>
 
     <el-dialog v-model="dialog" :title="editing ? '编辑供应商' : '新建供应商'" width="520px">
       <el-form label-width="120px">
@@ -381,6 +443,20 @@ onMounted(load)
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+}
+.toolbar.inner {
+  margin-bottom: 12px;
+}
+.tab-hint {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.pager-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 .title {
   font-size: 18px;
