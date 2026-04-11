@@ -7,6 +7,7 @@
 *.local
 
 # 后端
+srm-backend/src/main/resources/application-local.yml
 srm-backend/target/
 srm-backend/.idea/
 srm-backend/*.iml
