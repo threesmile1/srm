@@ -90,10 +90,6 @@ ALTER TABLE material_item
     MODIFY COLUMN name VARCHAR(255) NOT NULL COMMENT '物料名称',
     MODIFY COLUMN uom VARCHAR(32) NOT NULL COMMENT '计量单位',
     MODIFY COLUMN u9_item_code VARCHAR(64) NULL COMMENT 'U9 料品编码',
-    MODIFY COLUMN specification VARCHAR(512) NULL COMMENT '规格型号',
-    MODIFY COLUMN purchase_unit_price DECIMAL(19, 4) NULL COMMENT '参考采购单价',
-    MODIFY COLUMN supplier_name VARCHAR(255) NULL COMMENT 'U9/同步来源的供应商名称（与 PO 校验用）',
-    MODIFY COLUMN supplier_code VARCHAR(64) NULL COMMENT 'U9 供应商编码（lpgys 等同步）',
     MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
     MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
 
@@ -116,8 +112,6 @@ ALTER TABLE purchase_order
     MODIFY COLUMN revision_no INT NOT NULL DEFAULT 1 COMMENT '版本/修订号',
     MODIFY COLUMN remark VARCHAR(2000) NULL COMMENT '备注',
     MODIFY COLUMN export_status VARCHAR(32) NOT NULL DEFAULT 'NOT_EXPORTED' COMMENT '导出 U9 状态',
-    MODIFY COLUMN supplier_confirm_status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '供应商确认状态',
-    MODIFY COLUMN supplier_confirmed_at TIMESTAMP(6) NULL COMMENT '供应商确认时间',
     MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
     MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
 
@@ -342,26 +336,18 @@ ALTER TABLE perf_score
     MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
 
 -- ========== 发票与对账 ==========
+-- 列定义以 V8 为准（当前库无税务/状态时间等扩展列）
 ALTER TABLE invoice COMMENT = '发票头';
 ALTER TABLE invoice
     MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
-    MODIFY COLUMN invoice_no VARCHAR(64) NOT NULL COMMENT '系统发票单号',
+    MODIFY COLUMN invoice_no VARCHAR(64) NOT NULL COMMENT '发票单号',
     MODIFY COLUMN supplier_id BIGINT NOT NULL COMMENT '供应商ID',
     MODIFY COLUMN procurement_org_id BIGINT NOT NULL COMMENT '采购组织ID',
     MODIFY COLUMN invoice_date DATE NOT NULL COMMENT '开票日期',
-    MODIFY COLUMN invoice_code VARCHAR(32) NULL COMMENT '发票代码（税务）',
-    MODIFY COLUMN invoice_number VARCHAR(32) NULL COMMENT '发票号码（税务）',
-    MODIFY COLUMN seller_tax_no VARCHAR(64) NULL COMMENT '销方税号',
-    MODIFY COLUMN total_amount DECIMAL(19, 4) NOT NULL COMMENT '价税合计/总金额',
-    MODIFY COLUMN tax_amount DECIMAL(19, 4) NULL DEFAULT 0 COMMENT '税额',
+    MODIFY COLUMN total_amount DECIMAL(19, 4) NOT NULL COMMENT '总金额',
+    MODIFY COLUMN tax_amount DECIMAL(19, 4) DEFAULT 0 COMMENT '税额',
     MODIFY COLUMN currency VARCHAR(8) NOT NULL DEFAULT 'CNY' COMMENT '币种',
     MODIFY COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'SUBMITTED' COMMENT '发票状态',
-    MODIFY COLUMN submitted_at TIMESTAMP(6) NULL COMMENT '提交时间',
-    MODIFY COLUMN confirmed_at TIMESTAMP(6) NULL COMMENT '确认时间',
-    MODIFY COLUMN rejected_at TIMESTAMP(6) NULL COMMENT '驳回时间',
-    MODIFY COLUMN rejected_reason VARCHAR(1000) NULL COMMENT '驳回原因',
-    MODIFY COLUMN cancelled_at TIMESTAMP(6) NULL COMMENT '作废时间',
-    MODIFY COLUMN cancelled_reason VARCHAR(1000) NULL COMMENT '作废原因',
     MODIFY COLUMN remark VARCHAR(1000) NULL COMMENT '备注',
     MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
     MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
@@ -383,17 +369,6 @@ ALTER TABLE invoice_line
     MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
     MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
 
-ALTER TABLE invoice_attachment COMMENT = '发票附件（二进制存储）';
-ALTER TABLE invoice_attachment
-    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
-    MODIFY COLUMN invoice_id BIGINT NOT NULL COMMENT '发票头ID',
-    MODIFY COLUMN file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
-    MODIFY COLUMN content_type VARCHAR(100) NULL COMMENT 'MIME 类型',
-    MODIFY COLUMN file_size BIGINT NOT NULL COMMENT '文件大小（字节）',
-    MODIFY COLUMN content LONGBLOB NOT NULL COMMENT '文件内容',
-    MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
-    MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
-
 ALTER TABLE reconciliation COMMENT = '对账单头';
 ALTER TABLE reconciliation
     MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -408,24 +383,6 @@ ALTER TABLE reconciliation
     MODIFY COLUMN diff_amount DECIMAL(19, 4) NULL DEFAULT 0 COMMENT '差异金额',
     MODIFY COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'DRAFT' COMMENT '对账状态（含双方确认等）',
     MODIFY COLUMN remark VARCHAR(1000) NULL COMMENT '备注',
-    MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
-    MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
-
-ALTER TABLE reconciliation_line COMMENT = '对账单明细行';
-ALTER TABLE reconciliation_line
-    MODIFY COLUMN id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
-    MODIFY COLUMN reconciliation_id BIGINT NOT NULL COMMENT '对账单头ID',
-    MODIFY COLUMN line_no INT NOT NULL COMMENT '行号',
-    MODIFY COLUMN purchase_order_id BIGINT NULL COMMENT '采购订单ID',
-    MODIFY COLUMN purchase_order_line_id BIGINT NULL COMMENT '采购订单行ID',
-    MODIFY COLUMN goods_receipt_id BIGINT NULL COMMENT '收货单ID',
-    MODIFY COLUMN goods_receipt_line_id BIGINT NULL COMMENT '收货单行ID',
-    MODIFY COLUMN period_received_qty DECIMAL(19, 4) NOT NULL DEFAULT 0 COMMENT '期间收货数量',
-    MODIFY COLUMN unit_price DECIMAL(19, 4) NULL COMMENT '单价',
-    MODIFY COLUMN gr_amount DECIMAL(19, 4) NOT NULL DEFAULT 0 COMMENT '收货金额',
-    MODIFY COLUMN period_invoiced_qty DECIMAL(19, 4) NOT NULL DEFAULT 0 COMMENT '期间开票数量',
-    MODIFY COLUMN invoice_amount DECIMAL(19, 4) NOT NULL DEFAULT 0 COMMENT '发票金额',
-    MODIFY COLUMN diff_amount DECIMAL(19, 4) NOT NULL DEFAULT 0 COMMENT '行差异金额',
     MODIFY COLUMN created_at TIMESTAMP(6) NOT NULL COMMENT '创建时间',
     MODIFY COLUMN updated_at TIMESTAMP(6) NOT NULL COMMENT '更新时间';
 

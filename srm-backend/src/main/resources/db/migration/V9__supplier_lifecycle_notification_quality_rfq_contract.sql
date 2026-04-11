@@ -1,13 +1,14 @@
 -- ========== Supplier Lifecycle ==========
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(32) NOT NULL DEFAULT 'QUALIFIED';
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS contact_name VARCHAR(128);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(64);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS contact_email VARCHAR(128);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS address VARCHAR(500);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS bank_name VARCHAR(128);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS bank_account VARCHAR(64);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS business_scope VARCHAR(1000);
-ALTER TABLE supplier ADD COLUMN IF NOT EXISTS registration_remark VARCHAR(1000);
+-- 标准 MySQL 不支持 ADD COLUMN IF NOT EXISTS；本迁移由 Flyway 单次执行，失败重跑前勿手工加同名列
+ALTER TABLE supplier ADD COLUMN lifecycle_status VARCHAR(32) NOT NULL DEFAULT 'QUALIFIED';
+ALTER TABLE supplier ADD COLUMN contact_name VARCHAR(128);
+ALTER TABLE supplier ADD COLUMN contact_phone VARCHAR(64);
+ALTER TABLE supplier ADD COLUMN contact_email VARCHAR(128);
+ALTER TABLE supplier ADD COLUMN address VARCHAR(500);
+ALTER TABLE supplier ADD COLUMN bank_name VARCHAR(128);
+ALTER TABLE supplier ADD COLUMN bank_account VARCHAR(64);
+ALTER TABLE supplier ADD COLUMN business_scope VARCHAR(1000);
+ALTER TABLE supplier ADD COLUMN registration_remark VARCHAR(1000);
 
 CREATE TABLE IF NOT EXISTS supplier_audit (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

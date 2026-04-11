@@ -2,6 +2,12 @@ package com.srm.master.web;
 
 import com.srm.master.domain.MaterialItem;
 import com.srm.master.domain.Supplier;
+import com.srm.integration.u9.U9MaterialSyncJobRegistry;
+import com.srm.integration.u9.U9MaterialSyncJobRunner;
+import com.srm.integration.u9.U9MaterialSyncJobStatus;
+import com.srm.integration.u9.U9MaterialSyncRow;
+import com.srm.integration.u9.U9MaterialSyncService;
+import com.srm.web.error.NotFoundException;
 import com.srm.master.service.MasterDataImportService;
 import com.srm.master.service.MasterDataImportService.ImportResult;
 import com.srm.master.service.MasterDataService;
@@ -20,7 +26,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,6 +40,9 @@ public class MasterDataController {
 
     private final MasterDataService masterDataService;
     private final MasterDataImportService importService;
+    private final U9MaterialSyncService u9MaterialSyncService;
+    private final U9MaterialSyncJobRegistry u9MaterialSyncJobRegistry;
+    private final U9MaterialSyncJobRunner u9MaterialSyncJobRunner;
 
     @GetMapping("/suppliers")
     public List<SupplierResponse> listSuppliers() {
@@ -59,6 +70,34 @@ public class MasterDataController {
     @PostMapping("/materials/import")
     public ImportResult importMaterials(@RequestParam("file") MultipartFile file) {
         return importService.importMaterials(file);
+    }
+
+    /**
+     * U9 物料同步（wuliao.cpt 等）。无请求体时从配置 URL 拉取 JSON；有请求体时直接落库（便于网关/手工推送）。
+     */
+    @PostMapping("/materials/sync-from-u9")
+    public U9MaterialSyncService.U9MaterialSyncResult syncMaterialsFromU9(
+            @RequestBody(required = false) List<U9MaterialSyncRow> body) {
+        if (body != null) {
+            return u9MaterialSyncService.apply(body);
+        }
+        return u9MaterialSyncService.fetchAndApply();
+    }
+
+    /**
+     * 异步全量同步：立即返回 jobId，轮询 {@link #getU9SyncJob(String)} 直至 SUCCESS/FAILED。
+     */
+    @PostMapping("/materials/sync-from-u9/async")
+    public Map<String, String> startSyncMaterialsFromU9Async() {
+        String jobId = u9MaterialSyncJobRegistry.createJob();
+        u9MaterialSyncJobRunner.runAsync(jobId);
+        return Map.of("jobId", jobId);
+    }
+
+    @GetMapping("/materials/sync-from-u9/jobs/{jobId}")
+    public U9MaterialSyncJobStatus getU9SyncJob(@PathVariable String jobId) {
+        return u9MaterialSyncJobRegistry.get(jobId)
+                .orElseThrow(() -> new NotFoundException("同步任务不存在: " + jobId));
     }
 
     @GetMapping("/materials")
@@ -116,9 +155,30 @@ public class MasterDataController {
             Set<Long> procurementOrgIds
     ) {}
 
-    public record MaterialResponse(Long id, String code, String name, String uom, String u9ItemCode) {
+    public record MaterialResponse(
+            Long id,
+            String code,
+            String name,
+            String uom,
+            String u9ItemCode,
+            String specification,
+            BigDecimal purchaseUnitPrice,
+            String u9WarehouseName,
+            String u9SupplierCode,
+            String u9SupplierName
+    ) {
         static MaterialResponse from(MaterialItem m) {
-            return new MaterialResponse(m.getId(), m.getCode(), m.getName(), m.getUom(), m.getU9ItemCode());
+            return new MaterialResponse(
+                    m.getId(),
+                    m.getCode(),
+                    m.getName(),
+                    m.getUom(),
+                    m.getU9ItemCode(),
+                    m.getSpecification(),
+                    m.getPurchaseUnitPrice(),
+                    m.getU9WarehouseName(),
+                    m.getU9SupplierCode(),
+                    m.getU9SupplierName());
         }
     }
 

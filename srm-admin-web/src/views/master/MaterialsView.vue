@@ -2,7 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload as UploadIcon } from '@element-plus/icons-vue'
-import { masterApi, type Material, type ImportResult } from '../../api/master'
+import axios from 'axios'
+import { masterApi, type Material, type ImportResult, type U9MaterialSyncResult } from '../../api/master'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
 const rows = ref<Material[]>([])
@@ -13,6 +14,10 @@ const form = ref({ code: '', name: '', uom: '', u9ItemCode: '' })
 const importDialogVisible = ref(false)
 const importResult = ref<ImportResult | null>(null)
 const importing = ref(false)
+
+const u9Syncing = ref(false)
+const u9SyncResult = ref<U9MaterialSyncResult | null>(null)
+const u9SyncDialogVisible = ref(false)
 
 async function load() {
   const r = await masterApi.listMaterials()
@@ -74,6 +79,63 @@ async function handleImport(uploadFile: { raw: File }) {
   }
 }
 
+/** 后台异步同步（后端分页拉取帆软，避免单次大包超时） */
+async function syncFromU9() {
+  u9Syncing.value = true
+  u9SyncResult.value = null
+  const maxPolls = 900
+  const intervalMs = 2000
+  try {
+    const start = await masterApi.startU9SyncJob()
+    const jobId = start.data.jobId
+    ElMessage.info('已提交后台同步（分页拉取），请稍候…')
+
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise((r) => setTimeout(r, intervalMs))
+      const st = await masterApi.getU9SyncJob(jobId)
+      const state = st.data.state
+      if (state === 'PENDING' || state === 'RUNNING') {
+        continue
+      }
+      if (state === 'FAILED') {
+        ElMessage.error(st.data.errorMessage || 'U9 同步失败')
+        return
+      }
+      if (state === 'SUCCESS') {
+        const r = st.data.result
+        if (r) {
+          u9SyncResult.value = r
+          u9SyncDialogVisible.value = true
+          if (r.errors.length === 0) {
+            ElMessage.success(`U9 同步完成：新增 ${r.created}，更新 ${r.updated}`)
+          } else {
+            ElMessage.warning(`同步完成，有 ${r.errors.length} 条行级提示，请查看详情`)
+          }
+        } else {
+          ElMessage.success('U9 同步已完成')
+        }
+        await load()
+        return
+      }
+      ElMessage.warning('同步结束但状态异常，请刷新列表核对')
+      await load()
+      return
+    }
+    ElMessage.warning('等待结果超时（可刷新页面查看物料是否已写入）')
+    await load()
+  } catch (e: unknown) {
+    let msg = ''
+    if (axios.isAxiosError(e)) {
+      msg = (e.response?.data as { error?: string } | undefined)?.error ?? e.message
+    } else if (e && typeof e === 'object' && 'message' in e) {
+      msg = String((e as { message: string }).message)
+    }
+    ElMessage.error(msg || 'U9 同步失败')
+  } finally {
+    u9Syncing.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -81,9 +143,10 @@ onMounted(load)
   <div class="page">
     <div class="toolbar">
       <span class="title">物料</span>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <el-button type="primary" @click="openCreate">新建</el-button>
         <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
+        <el-button :loading="u9Syncing" @click="syncFromU9">从 U9 同步（后台分页）</el-button>
       </div>
     </div>
     <el-table :data="rows" stripe>
@@ -91,9 +154,14 @@ onMounted(load)
         <DataTableEmpty />
       </template>
       <el-table-column prop="code" label="编码" width="120" />
-      <el-table-column prop="name" label="名称" />
-      <el-table-column prop="uom" label="单位" width="80" />
-      <el-table-column prop="u9ItemCode" label="U9 料号" width="120" />
+      <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="specification" label="规格" width="120" show-overflow-tooltip />
+      <el-table-column prop="uom" label="单位" width="72" />
+      <el-table-column prop="purchaseUnitPrice" label="参考单价" width="100" />
+      <el-table-column prop="u9WarehouseName" label="仓库" width="110" show-overflow-tooltip />
+      <el-table-column prop="u9SupplierName" label="供应商" min-width="120" show-overflow-tooltip />
+      <el-table-column prop="u9SupplierCode" label="供应商编码" width="110" show-overflow-tooltip />
+      <el-table-column prop="u9ItemCode" label="U9 料号" width="110" />
       <el-table-column label="操作" width="100">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
@@ -151,6 +219,23 @@ onMounted(load)
           <p style="font-weight:600;color:var(--el-color-danger);margin:12px 0 4px">错误明细：</p>
           <ul>
             <li v-for="(err, i) in importResult.errors" :key="i">{{ err }}</li>
+          </ul>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="u9SyncDialogVisible" title="U9 物料同步结果" width="560px">
+      <div v-if="u9SyncResult" class="import-result">
+        <el-descriptions :column="4" border size="small">
+          <el-descriptions-item label="总行数">{{ u9SyncResult.total }}</el-descriptions-item>
+          <el-descriptions-item label="新增">{{ u9SyncResult.created }}</el-descriptions-item>
+          <el-descriptions-item label="更新">{{ u9SyncResult.updated }}</el-descriptions-item>
+          <el-descriptions-item label="跳过">{{ u9SyncResult.skipped }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="u9SyncResult.errors.length" class="import-errors">
+          <p style="font-weight:600;color:var(--el-color-warning);margin:12px 0 4px">行级提示：</p>
+          <ul>
+            <li v-for="(err, i) in u9SyncResult.errors" :key="i">{{ err }}</li>
           </ul>
         </div>
       </div>

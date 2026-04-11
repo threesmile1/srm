@@ -42,6 +42,30 @@ srm:
   over-receive-ratio: 0.05
   export-po-type-code: PO01
   export-gr-type-code: GR01
+  # 物料同步：帆软 Decision POST（响应含 err_code=0、data 为对象数组或 {data:{rows:[]}}）或 GET JSON
+  u9:
+    enabled: true
+    # 帆软：POST …/webroot/decision/url/api/data（无请求体「从 U9 同步」时必须配置 decision-api-url 或 material-sync-url）
+    decision-api-url: http://erp.paterson.com.cn:8050/webroot/decision/url/api/data
+    # 分页拉取每页条数（推荐）；≤0 则单次请求用下方 page-size（-1 易大包超时）
+    sync-page-size: 500
+    # report-path: API/wuliao.cpt
+    # datasource-name: ds1
+    # page-number: 1
+    # page-size: -1
+    # fine-report-parameters:
+    #   - name: pinming
+    #     type: String
+    #     value: ""
+    # 兼容：直接 GET JSON
+    # material-sync-url: https://u9-host/ReportService/wuliao.cpt
+    # base-url: https://u9-host/api
+    # material-api-path: wuliao.cpt
+    # http-user: ""
+    # http-password: ""
+    # 调用帆软/U9 超时（毫秒）：默认连接 15s、读取 180s，仍慢可加大 http-read-timeout-ms
+    # http-connect-timeout-ms: 15000
+    # http-read-timeout-ms: 180000
 
 logging:
   level:

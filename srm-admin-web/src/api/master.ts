@@ -1,5 +1,8 @@
 import { api } from './http'
 
+/** 帆软/U9 取数可能超过 30s，与后端 srm.u9.http-read-timeout-ms 对齐 */
+const U9_SYNC_TIMEOUT_MS = 180_000
+
 export type Supplier = {
   id: number
   code: string
@@ -16,6 +19,29 @@ export type Material = {
   name: string
   uom: string
   u9ItemCode: string | null
+  specification: string | null
+  purchaseUnitPrice: string | number | null
+  u9WarehouseName: string | null
+  u9SupplierCode: string | null
+  u9SupplierName: string | null
+}
+
+export type U9MaterialSyncResult = {
+  total: number
+  created: number
+  updated: number
+  skipped: number
+  errors: string[]
+}
+
+/** 异步同步任务状态（轮询 GET jobs/{jobId}） */
+export type U9SyncJobStatus = {
+  jobId: string
+  state: string
+  result: U9MaterialSyncResult | null
+  errorMessage: string | null
+  createdAtEpochMs: number
+  finishedAtEpochMs: number | null
 }
 
 export type ImportResult = {
@@ -54,4 +80,18 @@ export const masterApi = {
     fd.append('file', file)
     return api.post<ImportResult>('/api/v1/master/materials/import', fd)
   },
+  /** 同步拉取（可能较慢；大数据建议用 startU9SyncJob） */
+  syncMaterialsFromU9: (body?: unknown) =>
+    body === undefined
+      ? api.post<U9MaterialSyncResult>('/api/v1/master/materials/sync-from-u9', undefined, {
+          timeout: U9_SYNC_TIMEOUT_MS,
+        })
+      : api.post<U9MaterialSyncResult>('/api/v1/master/materials/sync-from-u9', body, {
+          timeout: U9_SYNC_TIMEOUT_MS,
+        }),
+  /** 异步全量同步：立即返回 jobId */
+  startU9SyncJob: () =>
+    api.post<{ jobId: string }>('/api/v1/master/materials/sync-from-u9/async'),
+  getU9SyncJob: (jobId: string) =>
+    api.get<U9SyncJobStatus>(`/api/v1/master/materials/sync-from-u9/jobs/${jobId}`, { timeout: 15000 }),
 }

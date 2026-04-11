@@ -5,6 +5,8 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 @Getter
 @Setter
@@ -22,4 +24,74 @@ public class SrmProperties {
      * 业务时区（JVM 默认时区、合同到期 cron、建议与 Jackson 一致）。生产固定为 Asia/Shanghai。
      */
     private String businessTimezone = "Asia/Shanghai";
+
+    /** U9 集成（物料 wuliao.cpt 等） */
+    private U9 u9 = new U9();
+
+    @Getter
+    @Setter
+    public static class U9 {
+        /**
+         * 是否允许通过配置 URL 拉取 U9 物料 JSON（关闭时仅支持请求体手工推送同步）。
+         */
+        private boolean enabled = false;
+
+        /**
+         * 帆软 Decision 数据接口完整 URL（POST application/json）。
+         * 示例：http://host:8050/webroot/decision/url/api/data
+         * 若配置此项，优先走帆软 POST 请求体，不再使用下方 GET URL。
+         */
+        private String decisionApiUrl = "";
+
+        /** 报表路径，对应 body 中 report_path */
+        private String reportPath = "API/wuliao.cpt";
+
+        /** 数据集名，对应 datasource_name */
+        private String datasourceName = "ds1";
+
+        private int pageNumber = 1;
+
+        /** -1 表示不分页（与帆软示例一致）；与 {@link #syncPageSize} 二选一使用 */
+        private int pageSize = -1;
+
+        /**
+         * 帆软 Decision 分页拉取时每页条数；大于 0 时按页循环直到 {@code total_page_number} 或末页不足一页。
+         * ≤0 时单次请求，使用上方的 {@code page_number}/{@code page_size}（例如一次性 -1 全量，易超时）。
+         * 默认 500，建议 200～1000。
+         */
+        private int syncPageSize = 500;
+
+        /**
+         * 报表参数列表，对应 body.parameters；空则默认一条 pinming（与常见 wuliao 模板一致）。
+         */
+        private List<FineReportParameter> fineReportParameters = new ArrayList<>();
+
+        /**
+         * 完整物料同步 URL（GET，兼容旧方式）。示例：https://u9-host/.../wuliao.cpt?format=json
+         */
+        private String materialSyncUrl = "";
+        /** 与 material-api-path 拼接：base-url + path */
+        private String baseUrl = "";
+        /** 相对路径，默认报表/API 名 wuliao.cpt */
+        private String materialApiPath = "wuliao.cpt";
+        private String httpUser = "";
+        private String httpPassword = "";
+
+        /** 连接帆软/U9 超时（毫秒），默认 15s */
+        private int httpConnectTimeoutMs = 15_000;
+
+        /**
+         * 读取帆软/U9 响应超时（毫秒）。报表取数可能较慢，默认 3 分钟；
+         * 仍超时可改为 300000（5 分钟）或更大。
+         */
+        private int httpReadTimeoutMs = 180_000;
+    }
+
+    @Getter
+    @Setter
+    public static class FineReportParameter {
+        private String name = "";
+        private String type = "String";
+        private String value = "";
+    }
 }
