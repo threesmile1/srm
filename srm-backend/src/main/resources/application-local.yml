@@ -1,0 +1,13 @@
+# 本机 MySQL 账号（复制自 application.yml 结构后覆盖）。此文件已加入 .gitignore，勿提交。
+# 启动：mvn spring-boot:run -Dspring-boot.run.profiles=dev,local
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/srm?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
+    username: threesmile
+    password: "4119917-Bb"
+
+# 允许局域网 IP 访问前端时跨域携带 Cookie（CORS 白名单）
+srm:
+  cors-extra-origin-patterns:
+    - "http://192.168.11.24:5173"
+    - "http://192.168.11.24:5174"
