@@ -84,9 +84,9 @@ public class U9MaterialFactoryWarehouseSyncService {
                 continue;
             }
             MaterialItem m = opt.get();
-            m.setWarehouseSuzhou(trimToNull(row.getCangkuSuzhou()));
-            m.setWarehouseChengdu(trimToNull(row.getCangkuChengdu()));
-            m.setWarehouseHuanan(trimToNull(row.getCangkuHuanan()));
+            m.setU9WarehouseSuzhou(trimToNull(row.getCangkuSuzhou()));
+            m.setU9WarehouseChengdu(trimToNull(row.getCangkuChengdu()));
+            m.setU9WarehouseHuanan(trimToNull(row.getCangkuHuanan()));
             materialItemRepository.save(m);
             yu++;
         }
@@ -111,7 +111,7 @@ public class U9MaterialFactoryWarehouseSyncService {
                 continue;
             }
             MaterialItem m = opt.get();
-            m.setWarehouseShuiqi(trimToNull(row.getCangkuShuiqi()));
+            m.setU9WarehouseShuiqi(trimToNull(row.getCangkuShuiqi()));
             materialItemRepository.save(m);
             su++;
         }

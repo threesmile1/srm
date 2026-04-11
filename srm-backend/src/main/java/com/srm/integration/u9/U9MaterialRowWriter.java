@@ -47,7 +47,6 @@ public class U9MaterialRowWriter {
         }
         m.setSpecification(trimToNull(row.getSpecification()));
         m.setPurchaseUnitPrice(row.getPurchaseUnitPrice());
-        m.setU9WarehouseName(trimToNull(row.getWarehouseName()));
         m.setU9SupplierCode(trimToNull(row.getSupplierCode()));
         m.setU9SupplierName(trimToNull(row.getSupplierName()));
     }

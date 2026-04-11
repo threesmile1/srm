@@ -21,12 +21,11 @@ export type Material = {
   u9ItemCode: string | null
   specification: string | null
   purchaseUnitPrice: string | number | null
-  u9WarehouseName: string | null
   /** 苏州 / 成都 / 华南 / 水漆 工厂默认存储仓库（帆软 cangku_yigui / cangku_shuiqi） */
-  warehouseSuzhou: string | null
-  warehouseChengdu: string | null
-  warehouseHuanan: string | null
-  warehouseShuiqi: string | null
+  u9WarehouseSuzhou: string | null
+  u9WarehouseChengdu: string | null
+  u9WarehouseHuanan: string | null
+  u9WarehouseShuiqi: string | null
   u9SupplierCode: string | null
   u9SupplierName: string | null
 }
@@ -135,9 +134,11 @@ export const masterApi = {
       : api.post<U9MaterialSyncResult>('/api/v1/master/materials/sync-from-u9', body, {
           timeout: U9_SYNC_TIMEOUT_MS,
         }),
-  /** 异步全量同步：立即返回 jobId */
+  /** 异步全量同步：立即返回 jobId（后端建任务可能略慢，略加长超时） */
   startU9SyncJob: () =>
-    api.post<{ jobId: string }>('/api/v1/master/materials/sync-from-u9/async'),
+    api.post<{ jobId: string }>('/api/v1/master/materials/sync-from-u9/async', undefined, {
+      timeout: 120_000,
+    }),
   getU9SyncJob: (jobId: string) =>
     api.get<U9SyncJobStatus>(`/api/v1/master/materials/sync-from-u9/jobs/${jobId}`, { timeout: 15000 }),
 

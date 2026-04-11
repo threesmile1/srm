@@ -29,12 +29,30 @@ const factoryWhResult = ref<FactoryWarehouseSyncResult | null>(null)
 const factoryWhDialogVisible = ref(false)
 
 async function load() {
-  const r = await masterApi.listMaterials({
-    page: currentPage.value - 1,
-    size: pageSize.value,
-  })
-  rows.value = r.data.content
-  total.value = r.data.totalElements
+  try {
+    const r = await masterApi.listMaterials({
+      page: currentPage.value - 1,
+      size: pageSize.value,
+    })
+    rows.value = r.data.content
+    total.value = r.data.totalElements
+  } catch (e: unknown) {
+    rows.value = []
+    total.value = 0
+    let msg = '加载物料列表失败'
+    if (axios.isAxiosError(e)) {
+      const st = e.response?.status
+      if (st === 401) {
+        msg = '未登录或会话已过期，请先登录后再打开物料页'
+      } else if (e.code === 'ERR_NETWORK' || e.message === 'Network Error') {
+        msg =
+          '网络错误：请确认后端已启动（默认 8080），并使用 npm run dev（走 /api 代理）；勿用 file:// 打开页面。'
+      } else {
+        msg = (e.response?.data as { error?: string } | undefined)?.error ?? e.message ?? msg
+      }
+    }
+    ElMessage.error(msg)
+  }
 }
 
 function onPageChange() {
@@ -180,10 +198,10 @@ onMounted(load)
       <el-table-column prop="specification" label="规格" width="120" show-overflow-tooltip />
       <el-table-column prop="uom" label="单位" width="72" />
       <el-table-column prop="purchaseUnitPrice" label="参考单价" width="100" />
-      <el-table-column prop="warehouseSuzhou" label="苏州仓" width="100" show-overflow-tooltip />
-      <el-table-column prop="warehouseChengdu" label="成都仓" width="100" show-overflow-tooltip />
-      <el-table-column prop="warehouseHuanan" label="华南仓" width="100" show-overflow-tooltip />
-      <el-table-column prop="warehouseShuiqi" label="水漆仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="u9WarehouseSuzhou" label="苏州仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="u9WarehouseChengdu" label="成都仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="u9WarehouseHuanan" label="华南仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="u9WarehouseShuiqi" label="水漆仓" width="100" show-overflow-tooltip />
       <el-table-column prop="u9SupplierName" label="供应商" min-width="120" show-overflow-tooltip />
       <el-table-column prop="u9SupplierCode" label="供应商编码" width="110" show-overflow-tooltip />
       <el-table-column prop="u9ItemCode" label="U9 料号" width="110" />

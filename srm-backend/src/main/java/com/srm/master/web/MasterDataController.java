@@ -212,11 +212,10 @@ public class MasterDataController {
             String u9ItemCode,
             String specification,
             BigDecimal purchaseUnitPrice,
-            String u9WarehouseName,
-            String warehouseSuzhou,
-            String warehouseChengdu,
-            String warehouseHuanan,
-            String warehouseShuiqi,
+            String u9WarehouseSuzhou,
+            String u9WarehouseChengdu,
+            String u9WarehouseHuanan,
+            String u9WarehouseShuiqi,
             String u9SupplierCode,
             String u9SupplierName
     ) {
@@ -229,11 +228,10 @@ public class MasterDataController {
                     m.getU9ItemCode(),
                     m.getSpecification(),
                     m.getPurchaseUnitPrice(),
-                    m.getU9WarehouseName(),
-                    m.getWarehouseSuzhou(),
-                    m.getWarehouseChengdu(),
-                    m.getWarehouseHuanan(),
-                    m.getWarehouseShuiqi(),
+                    m.getU9WarehouseSuzhou(),
+                    m.getU9WarehouseChengdu(),
+                    m.getU9WarehouseHuanan(),
+                    m.getU9WarehouseShuiqi(),
                     m.getU9SupplierCode(),
                     m.getU9SupplierName());
         }

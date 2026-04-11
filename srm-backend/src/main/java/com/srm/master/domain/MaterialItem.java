@@ -35,24 +35,21 @@ public class MaterialItem extends BaseEntity {
     @Column(name = "purchase_unit_price", precision = 19, scale = 4)
     private BigDecimal purchaseUnitPrice;
 
-    @Column(name = "u9_warehouse_name", length = 255)
-    private String u9WarehouseName;
-
     /** 苏州工厂存储仓库（cangku_yigui.cpt：cangku_suzhou） */
-    @Column(name = "warehouse_suzhou", length = 255)
-    private String warehouseSuzhou;
+    @Column(name = "u9_warehouse_suzhou", length = 255)
+    private String u9WarehouseSuzhou;
 
     /** 成都工厂存储仓库（cangku_yigui.cpt：cangku_chengdu） */
-    @Column(name = "warehouse_chengdu", length = 255)
-    private String warehouseChengdu;
+    @Column(name = "u9_warehouse_chengdu", length = 255)
+    private String u9WarehouseChengdu;
 
     /** 华南工厂存储仓库（cangku_yigui.cpt：cangku_huanan） */
-    @Column(name = "warehouse_huanan", length = 255)
-    private String warehouseHuanan;
+    @Column(name = "u9_warehouse_huanan", length = 255)
+    private String u9WarehouseHuanan;
 
     /** 水漆工厂存储仓库（cangku_shuiqi.cpt） */
-    @Column(name = "warehouse_shuiqi", length = 255)
-    private String warehouseShuiqi;
+    @Column(name = "u9_warehouse_shuiqi", length = 255)
+    private String u9WarehouseShuiqi;
 
     @Column(name = "u9_supplier_code", length = 64)
     private String u9SupplierCode;

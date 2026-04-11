@@ -62,30 +62,25 @@ public class MaterialDerivedMasterService {
     @Transactional(readOnly = true)
     public Page<MaterialWarehouseRefRow> pageWarehouseRefs(Pageable pageable) {
         String union = """
-                SELECT 'U9' AS scope_label, TRIM(u9_warehouse_name) AS warehouse_name, COUNT(*) AS material_count
+                SELECT '苏州', TRIM(u9_warehouse_suzhou), COUNT(*)
                 FROM material_item
-                WHERE u9_warehouse_name IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_name)) > 0
-                GROUP BY TRIM(u9_warehouse_name)
+                WHERE u9_warehouse_suzhou IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_suzhou)) > 0
+                GROUP BY TRIM(u9_warehouse_suzhou)
                 UNION ALL
-                SELECT '苏州', TRIM(warehouse_suzhou), COUNT(*)
+                SELECT '成都', TRIM(u9_warehouse_chengdu), COUNT(*)
                 FROM material_item
-                WHERE warehouse_suzhou IS NOT NULL AND CHAR_LENGTH(TRIM(warehouse_suzhou)) > 0
-                GROUP BY TRIM(warehouse_suzhou)
+                WHERE u9_warehouse_chengdu IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_chengdu)) > 0
+                GROUP BY TRIM(u9_warehouse_chengdu)
                 UNION ALL
-                SELECT '成都', TRIM(warehouse_chengdu), COUNT(*)
+                SELECT '华南', TRIM(u9_warehouse_huanan), COUNT(*)
                 FROM material_item
-                WHERE warehouse_chengdu IS NOT NULL AND CHAR_LENGTH(TRIM(warehouse_chengdu)) > 0
-                GROUP BY TRIM(warehouse_chengdu)
+                WHERE u9_warehouse_huanan IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_huanan)) > 0
+                GROUP BY TRIM(u9_warehouse_huanan)
                 UNION ALL
-                SELECT '华南', TRIM(warehouse_huanan), COUNT(*)
+                SELECT '水漆', TRIM(u9_warehouse_shuiqi), COUNT(*)
                 FROM material_item
-                WHERE warehouse_huanan IS NOT NULL AND CHAR_LENGTH(TRIM(warehouse_huanan)) > 0
-                GROUP BY TRIM(warehouse_huanan)
-                UNION ALL
-                SELECT '水漆', TRIM(warehouse_shuiqi), COUNT(*)
-                FROM material_item
-                WHERE warehouse_shuiqi IS NOT NULL AND CHAR_LENGTH(TRIM(warehouse_shuiqi)) > 0
-                GROUP BY TRIM(warehouse_shuiqi)
+                WHERE u9_warehouse_shuiqi IS NOT NULL AND CHAR_LENGTH(TRIM(u9_warehouse_shuiqi)) > 0
+                GROUP BY TRIM(u9_warehouse_shuiqi)
                 """;
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM (" + union + ") t", Long.class);
