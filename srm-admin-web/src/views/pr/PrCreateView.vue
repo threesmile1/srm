@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
 import { foundationApi, type OrgUnit, type Warehouse } from '../../api/foundation'
-import { masterApi, type Supplier } from '../../api/master'
+import { masterApi, type Material, type Supplier } from '../../api/master'
 import { prApi } from '../../api/pr'
 import { useMaterialRemoteSelect } from '../../composables/useMaterialRemoteSelect'
 
@@ -17,7 +17,19 @@ const {
   materialLoading,
   remoteSearch: remoteSearchMaterials,
   prefetchInitial: prefetchMaterials,
+  getMaterial,
 } = useMaterialRemoteSelect()
+
+type LineRow = {
+  materialId: number | null
+  warehouseId: number | null
+  supplierId: number | null
+  qty: number
+  uom: string
+  unitPrice: number | null
+  requestedDate: string
+  remark: string
+}
 
 const form = ref({
   procurementOrgId: null as number | null,
@@ -26,12 +38,88 @@ const form = ref({
   remark: '',
 })
 
-type LineRow = {
-  materialId: number | null; warehouseId: number | null; supplierId: number | null
-  qty: number; uom: string; unitPrice: number | null; requestedDate: string; remark: string
+function defaultDatePlusDays(days: number): string {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + days)
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const da = String(d.getDate()).padStart(2, '0')
+  return `${y}-${mo}-${da}`
 }
+
+function parsePurchasePrice(v: string | number | null | undefined): number | null {
+  if (v == null || v === '') return null
+  const n = typeof v === 'number' ? v : parseFloat(String(v))
+  return Number.isFinite(n) ? n : null
+}
+
+/** 与物料四厂仓字段、采购组织名称一致（见主数据同步） */
+function warehouseCodeForOrg(orgName: string | undefined, m: Material): string | null {
+  if (!orgName) return null
+  const map: Record<string, keyof Material> = {
+    苏州工厂: 'u9WarehouseSuzhou',
+    成都工厂: 'u9WarehouseChengdu',
+    华南工厂: 'u9WarehouseHuanan',
+    水漆工厂: 'u9WarehouseShuiqi',
+  }
+  const key = map[orgName]
+  if (!key) return null
+  const raw = m[key]
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  return s.length > 0 ? s : null
+}
+
+function resolveSupplierId(u9Code: string | null | undefined): number | null {
+  const t = u9Code?.trim()
+  if (!t) return null
+  const sup = suppliers.value.find(
+    (s) => s.code.trim() === t || (s.u9VendorCode && s.u9VendorCode.trim() === t),
+  )
+  return sup?.id ?? null
+}
+
+function onMaterialChange(row: LineRow, materialId: number | string | null | undefined) {
+  const mid =
+    materialId == null || materialId === ''
+      ? null
+      : typeof materialId === 'number'
+        ? materialId
+        : Number(materialId)
+  if (mid == null || Number.isNaN(mid)) {
+    row.uom = ''
+    row.unitPrice = null
+    row.supplierId = null
+    row.warehouseId = null
+    return
+  }
+  const m = getMaterial(mid)
+  if (!m) return
+  row.uom = (m.uom || '').trim()
+  row.unitPrice = parsePurchasePrice(m.purchaseUnitPrice)
+  row.supplierId = resolveSupplierId(m.u9SupplierCode)
+  const org = orgs.value.find((o) => o.id === form.value.procurementOrgId)
+  const whCode = warehouseCodeForOrg(org?.name, m)
+  if (whCode) {
+    const wh = warehouses.value.find((w) => w.code.trim() === whCode)
+    row.warehouseId = wh?.id ?? null
+  } else {
+    row.warehouseId = null
+  }
+  row.requestedDate = defaultDatePlusDays(7)
+}
+
 const lines = ref<LineRow[]>([
-  { materialId: null, warehouseId: null, supplierId: null, qty: 1, uom: '', unitPrice: null, requestedDate: '', remark: '' },
+  {
+    materialId: null,
+    warehouseId: null,
+    supplierId: null,
+    qty: 1,
+    uom: '',
+    unitPrice: null,
+    requestedDate: defaultDatePlusDays(7),
+    remark: '',
+  },
 ])
 
 async function loadOrgs() {
@@ -45,6 +133,19 @@ async function loadOrgs() {
 async function loadWarehouses() {
   if (!form.value.procurementOrgId) return
   warehouses.value = (await foundationApi.listWarehouses(form.value.procurementOrgId)).data
+  const org = orgs.value.find((o) => o.id === form.value.procurementOrgId)
+  for (const row of lines.value) {
+    if (row.materialId == null) continue
+    const m = getMaterial(row.materialId)
+    if (!m) continue
+    const whCode = warehouseCodeForOrg(org?.name, m)
+    if (whCode) {
+      const wh = warehouses.value.find((w) => w.code.trim() === whCode)
+      row.warehouseId = wh?.id ?? null
+    } else {
+      row.warehouseId = null
+    }
+  }
 }
 
 onMounted(async () => {
@@ -55,7 +156,16 @@ onMounted(async () => {
 })
 
 function addLine() {
-  lines.value.push({ materialId: null, warehouseId: null, supplierId: null, qty: 1, uom: '', unitPrice: null, requestedDate: '', remark: '' })
+  lines.value.push({
+    materialId: null,
+    warehouseId: null,
+    supplierId: null,
+    qty: 1,
+    uom: '',
+    unitPrice: null,
+    requestedDate: defaultDatePlusDays(7),
+    remark: '',
+  })
 }
 
 function removeLine(i: number) { lines.value.splice(i, 1) }
@@ -125,11 +235,13 @@ async function save() {
             v-model="row.materialId"
             filterable
             remote
+            clearable
             reserve-keyword
             placeholder="输入编码或名称搜索"
             :remote-method="remoteSearchMaterials"
             :loading="materialLoading"
             style="width: 100%"
+            @change="(id: number | string | null | undefined) => onMaterialChange(row, id)"
           >
             <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
           </el-select>
