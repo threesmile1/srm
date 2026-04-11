@@ -58,7 +58,7 @@ public class MasterDataController {
     }
 
     /**
-     * 物料中出现的供应商（material_item 快照 + material_supplier_u9），用于主数据展示；下单仍用 {@link #listSuppliers()} 主档。
+     * 物料中出现的供应商（分页聚合，与 {@link #listSuppliers()} 同源维度）；列表展示用。
      */
     @GetMapping("/suppliers/material-derived")
     public Page<MaterialDerivedMasterService.MaterialSupplierRefRow> listSuppliersFromMaterials(

@@ -42,8 +42,8 @@ public class U9MaterialSupplierWriter {
             }
             MaterialSupplierU9 e = new MaterialSupplierU9();
             e.setMaterial(m);
-            e.setSupplierCode(r.getSupplierCode().trim());
-            e.setSupplierName(trimToNull(r.getSupplierName()));
+            e.setU9SupplierCode(r.getSupplierCode().trim());
+            e.setU9SupplierName(trimToNull(r.getSupplierName()));
             batch.add(e);
         }
         if (!batch.isEmpty()) {

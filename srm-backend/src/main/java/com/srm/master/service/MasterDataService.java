@@ -15,8 +15,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -27,10 +31,57 @@ public class MasterDataService {
     private final SupplierRepository supplierRepository;
     private final MaterialItemRepository materialItemRepository;
     private final OrgUnitRepository orgUnitRepository;
+    private final MaterialDerivedMasterService materialDerivedMasterService;
 
-    @Transactional(readOnly = true)
+    /**
+     * 下单/下拉用：仅包含物料中出现的 U9 供应商；缺失时在 supplier 表按编码自动建档并授权全部采购组织。
+     */
+    @Transactional
     public List<Supplier> listSuppliers() {
-        return supplierRepository.findAll();
+        List<MaterialDerivedMasterService.MaterialSupplierRefRow> refs =
+                materialDerivedMasterService.listAllMaterialSupplierRefs();
+        if (refs.isEmpty()) {
+            return List.of();
+        }
+        List<OrgUnit> procOrgs = orgUnitRepository.findByOrgType(OrgUnitType.PROCUREMENT);
+        Set<Long> allProcIds = procOrgs.stream().map(OrgUnit::getId).collect(Collectors.toCollection(HashSet::new));
+        if (allProcIds.isEmpty()) {
+            return List.of();
+        }
+        for (MaterialDerivedMasterService.MaterialSupplierRefRow ref : refs) {
+            if (ref == null || !StringUtils.hasText(ref.u9SupplierCode())) {
+                continue;
+            }
+            String code = ref.u9SupplierCode().trim();
+            String name = StringUtils.hasText(ref.u9SupplierName()) ? ref.u9SupplierName().trim() : code;
+            Optional<Supplier> existing = supplierRepository.findByCode(code);
+            if (existing.isPresent()) {
+                Supplier s = existing.get();
+                if (!name.equals(s.getName())) {
+                    s.setName(name);
+                    supplierRepository.save(s);
+                }
+                s.getAuthorizedProcurementOrgs().clear();
+                attachOrgScopes(s, allProcIds);
+                supplierRepository.save(s);
+            } else {
+                Supplier s = new Supplier();
+                s.setCode(code);
+                s.setName(name);
+                s.setU9VendorCode(code);
+                attachOrgScopes(s, allProcIds);
+                supplierRepository.save(s);
+            }
+        }
+        Set<String> allowed = refs.stream()
+                .filter(r -> r != null && StringUtils.hasText(r.u9SupplierCode()))
+                .map(r -> r.u9SupplierCode().trim())
+                .collect(Collectors.toSet());
+        List<Supplier> out = new ArrayList<>();
+        for (String code : allowed.stream().sorted().toList()) {
+            supplierRepository.findByCode(code).ifPresent(out::add);
+        }
+        return out;
     }
 
     @Transactional(readOnly = true)

@@ -19,9 +19,45 @@ public class MaterialDerivedMasterService {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /** 与 {@link #pageSupplierRefs} 一致：物料快照 + material_supplier_u9 合并后的供应商维度 */
+    private static final String MATERIAL_SUPPLIER_REF_UNION = """
+            SELECT u9_supplier_code, MAX(u9_supplier_name) AS u9_supplier_name, SUM(ref_cnt) AS ref_count
+            FROM (
+                SELECT TRIM(u9_supplier_code) AS u9_supplier_code,
+                       MAX(TRIM(u9_supplier_name)) AS u9_supplier_name,
+                       COUNT(*) AS ref_cnt
+                FROM material_item
+                WHERE u9_supplier_code IS NOT NULL AND CHAR_LENGTH(TRIM(u9_supplier_code)) > 0
+                GROUP BY TRIM(u9_supplier_code)
+                UNION ALL
+                SELECT TRIM(u9_supplier_code) AS u9_supplier_code,
+                       MAX(TRIM(u9_supplier_name)) AS u9_supplier_name,
+                       COUNT(DISTINCT material_id) AS ref_cnt
+                FROM material_supplier_u9
+                WHERE u9_supplier_code IS NOT NULL AND CHAR_LENGTH(TRIM(u9_supplier_code)) > 0
+                GROUP BY TRIM(u9_supplier_code)
+            ) s
+            GROUP BY u9_supplier_code
+            """;
+
     public record MaterialWarehouseRefRow(String scope, String warehouseName, long materialCount) {}
 
-    public record MaterialSupplierRefRow(String supplierCode, String supplierName, long refCount) {}
+    public record MaterialSupplierRefRow(String u9SupplierCode, String u9SupplierName, long refCount) {}
+
+    /**
+     * 全部「物料中出现的供应商」维度（无分页），供 {@link MasterDataService#listSuppliers()} 同步 supplier 主档。
+     */
+    @Transactional(readOnly = true)
+    public List<MaterialSupplierRefRow> listAllMaterialSupplierRefs() {
+        String sql = "SELECT u9_supplier_code, u9_supplier_name, ref_count FROM (" + MATERIAL_SUPPLIER_REF_UNION
+                + ") t ORDER BY u9_supplier_code";
+        return jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> new MaterialSupplierRefRow(
+                        rs.getString("u9_supplier_code"),
+                        rs.getString("u9_supplier_name"),
+                        rs.getLong("ref_count")));
+    }
 
     @Transactional(readOnly = true)
     public Page<MaterialWarehouseRefRow> pageWarehouseRefs(Pageable pageable) {
@@ -72,38 +108,20 @@ public class MaterialDerivedMasterService {
 
     @Transactional(readOnly = true)
     public Page<MaterialSupplierRefRow> pageSupplierRefs(Pageable pageable) {
-        String union = """
-                SELECT supplier_code, MAX(supplier_name) AS supplier_name, SUM(ref_cnt) AS ref_count
-                FROM (
-                    SELECT TRIM(u9_supplier_code) AS supplier_code,
-                           MAX(TRIM(u9_supplier_name)) AS supplier_name,
-                           COUNT(*) AS ref_cnt
-                    FROM material_item
-                    WHERE u9_supplier_code IS NOT NULL AND CHAR_LENGTH(TRIM(u9_supplier_code)) > 0
-                    GROUP BY TRIM(u9_supplier_code)
-                    UNION ALL
-                    SELECT TRIM(supplier_code) AS supplier_code,
-                           MAX(TRIM(supplier_name)) AS supplier_name,
-                           COUNT(DISTINCT material_id) AS ref_cnt
-                    FROM material_supplier_u9
-                    WHERE supplier_code IS NOT NULL AND CHAR_LENGTH(TRIM(supplier_code)) > 0
-                    GROUP BY TRIM(supplier_code)
-                ) s
-                GROUP BY supplier_code
-                """;
+        String union = MATERIAL_SUPPLIER_REF_UNION;
         Long total = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM (" + union + ") t", Long.class);
         long tot = total != null ? total : 0;
         if (tot == 0) {
             return new PageImpl<>(List.of(), pageable, 0);
         }
-        String paged = "SELECT supplier_code, supplier_name, ref_count FROM (" + union
-                + ") t ORDER BY supplier_code LIMIT ? OFFSET ?";
+        String paged = "SELECT u9_supplier_code, u9_supplier_name, ref_count FROM (" + union
+                + ") t ORDER BY u9_supplier_code LIMIT ? OFFSET ?";
         List<MaterialSupplierRefRow> content = jdbcTemplate.query(
                 paged,
                 (rs, rowNum) -> new MaterialSupplierRefRow(
-                        rs.getString("supplier_code"),
-                        rs.getString("supplier_name"),
+                        rs.getString("u9_supplier_code"),
+                        rs.getString("u9_supplier_name"),
                         rs.getLong("ref_count")),
                 pageable.getPageSize(),
                 pageable.getOffset());

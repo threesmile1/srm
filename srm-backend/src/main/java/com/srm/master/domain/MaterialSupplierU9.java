@@ -15,7 +15,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "material_supplier_u9", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_msu9_mat_sup", columnNames = {"material_id", "supplier_code"})
+        @UniqueConstraint(name = "uk_msu9_mat_sup", columnNames = {"material_id", "u9_supplier_code"})
 })
 public class MaterialSupplierU9 extends BaseEntity {
 
@@ -23,9 +23,9 @@ public class MaterialSupplierU9 extends BaseEntity {
     @JoinColumn(name = "material_id", nullable = false)
     private MaterialItem material;
 
-    @Column(name = "supplier_code", nullable = false, length = 64)
-    private String supplierCode;
+    @Column(name = "u9_supplier_code", nullable = false, length = 64)
+    private String u9SupplierCode;
 
-    @Column(name = "supplier_name", length = 255)
-    private String supplierName;
+    @Column(name = "u9_supplier_name", length = 255)
+    private String u9SupplierName;
 }

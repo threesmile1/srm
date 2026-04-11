@@ -180,7 +180,6 @@ onMounted(load)
       <el-table-column prop="specification" label="规格" width="120" show-overflow-tooltip />
       <el-table-column prop="uom" label="单位" width="72" />
       <el-table-column prop="purchaseUnitPrice" label="参考单价" width="100" />
-      <el-table-column prop="u9WarehouseName" label="仓库(U9)" width="110" show-overflow-tooltip />
       <el-table-column prop="warehouseSuzhou" label="苏州仓" width="100" show-overflow-tooltip />
       <el-table-column prop="warehouseChengdu" label="成都仓" width="100" show-overflow-tooltip />
       <el-table-column prop="warehouseHuanan" label="华南仓" width="100" show-overflow-tooltip />

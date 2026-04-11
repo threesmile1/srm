@@ -14,6 +14,10 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, Long> {
 
     List<OrgUnit> findByLedgerAndOrgTypeOrderByCodeAsc(Ledger ledger, OrgUnitType orgType);
 
+    List<OrgUnit> findByOrgType(OrgUnitType orgType);
+
+    List<OrgUnit> findByOrgTypeOrderByCodeAsc(OrgUnitType orgType);
+
     boolean existsByLedgerAndCode(Ledger ledger, String code);
 
     Optional<OrgUnit> findByCode(String code);

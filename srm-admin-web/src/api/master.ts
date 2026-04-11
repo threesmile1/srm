@@ -79,8 +79,8 @@ export type MaterialWarehouseRef = {
 
 /** 物料中出现的供应商（快照 + material_supplier_u9） */
 export type MaterialSupplierRef = {
-  supplierCode: string
-  supplierName: string | null
+  u9SupplierCode: string
+  u9SupplierName: string | null
   refCount: number
 }
 
