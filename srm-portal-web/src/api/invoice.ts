@@ -123,6 +123,13 @@ export const portalInvoiceApi = {
 
 export const portalReconApi = {
   list: () => api.get<ReconSummary[]>('/api/v1/portal/reconciliations'),
+  /** 甄云类：供应商发起对账 → 待采购确认 */
+  create: (body: {
+    procurementOrgId: number
+    periodFrom: string
+    periodTo: string
+    remark?: string
+  }) => api.post<ReconSummary>('/api/v1/portal/reconciliations', body),
   supplierConfirm: (id: number) =>
     api.post<ReconSummary>(`/api/v1/portal/reconciliations/${id}/supplier-confirm`),
   supplierDispute: (id: number, reason: string) =>

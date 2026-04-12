@@ -7,9 +7,11 @@ import com.srm.web.error.ForbiddenException;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Tag(name = "PortalReconciliation", description = "供应商门户 - 对账")
@@ -36,6 +38,19 @@ public class PortalReconciliationController {
                 .toList();
     }
 
+    /**
+     * 甄云类：月末由供应商在门户发起对账，生成后状态为「待采购确认」。
+     */
+    @PostMapping
+    public InvoiceController.ReconSummary create(@Valid @RequestBody PortalReconCreateRequest req,
+                                                   HttpSession session) {
+        Long sid = requireSupplierId(session);
+        Reconciliation r = invoiceService.createReconciliation(
+                sid, req.procurementOrgId(),
+                req.periodFrom(), req.periodTo(), req.remark(), true);
+        return InvoiceController.ReconSummary.from(r);
+    }
+
     @PostMapping("/{id}/supplier-confirm")
     public InvoiceController.ReconSummary supplierConfirm(@PathVariable Long id, HttpSession session) {
         Long sid = requireSupplierId(session);
@@ -51,4 +66,11 @@ public class PortalReconciliationController {
         Reconciliation r = invoiceService.supplierDisputeReconciliation(id, sid, req.reason());
         return InvoiceController.ReconSummary.from(r);
     }
+
+    public record PortalReconCreateRequest(
+            @NotNull Long procurementOrgId,
+            @NotNull LocalDate periodFrom,
+            @NotNull LocalDate periodTo,
+            String remark
+    ) {}
 }

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { invoiceApi, type ReconSummary } from '../../api/invoice'
+import { masterApi, type Supplier } from '../../api/master'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
 import { useAuthStore } from '../../stores/auth'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
@@ -12,6 +13,22 @@ const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
 usePersistedProcurementOrg(orgId, orgs, 'recon-list', () => auth.user?.defaultProcurementOrgId ?? null)
 const rows = ref<ReconSummary[]>([])
+const suppliers = ref<Supplier[]>([])
+const createOpen = ref(false)
+const createSubmitting = ref(false)
+const createForm = ref({
+  supplierId: null as number | null,
+  procurementOrgId: null as number | null,
+  periodFrom: '',
+  periodTo: '',
+  remark: '',
+})
+
+const suppliersForOrg = computed(() => {
+  const oid = orgId.value
+  if (oid == null) return suppliers.value
+  return suppliers.value.filter((s) => s.procurementOrgIds?.includes(oid))
+})
 
 const statusMap: Record<string, string> = {
   PENDING_SUPPLIER: '待供应商确认',
@@ -45,10 +62,74 @@ async function loadData() {
 watch(orgId, () => loadData())
 onMounted(async () => { await loadOrgs(); await loadData() })
 
+async function loadSuppliers() {
+  suppliers.value = (await masterApi.listSuppliers()).data
+}
+
+async function openCreateRecon() {
+  if (orgId.value == null) {
+    ElMessage.warning('请先选择采购组织')
+    return
+  }
+  if (!suppliers.value.length) await loadSuppliers()
+  createForm.value = {
+    supplierId: suppliersForOrg.value[0]?.id ?? null,
+    procurementOrgId: orgId.value,
+    periodFrom: '',
+    periodTo: '',
+    remark: '',
+  }
+  if (createForm.value.supplierId == null && suppliers.value.length) {
+    createForm.value.supplierId = suppliers.value[0].id
+  }
+  createOpen.value = true
+}
+
+async function submitCreateRecon() {
+  const f = createForm.value
+  if (f.supplierId == null || f.procurementOrgId == null) {
+    ElMessage.warning('请选择供应商与采购组织')
+    return
+  }
+  if (!f.periodFrom || !f.periodTo) {
+    ElMessage.warning('请填写对账期间起止')
+    return
+  }
+  createSubmitting.value = true
+  try {
+    await invoiceApi.createRecon({
+      supplierId: f.supplierId,
+      procurementOrgId: f.procurementOrgId,
+      periodFrom: f.periodFrom,
+      periodTo: f.periodTo,
+      remark: f.remark.trim() || undefined,
+    })
+    ElMessage.success('已生成对账单，待供应商确认')
+    createOpen.value = false
+    await loadData()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '创建失败')
+  } finally {
+    createSubmitting.value = false
+  }
+}
+
 async function confirmRecon(id: number) {
-  await invoiceApi.confirmRecon(id)
-  ElMessage.success('采购已确认对账')
-  await loadData()
+  try {
+    await invoiceApi.confirmRecon(id)
+    ElMessage.success('采购已确认对账')
+    await loadData()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '确认失败')
+  }
 }
 
 function openReject(id: number) {
@@ -70,10 +151,18 @@ async function submitReject() {
     ElMessage.warning('请填写驳回说明')
     return
   }
-  await invoiceApi.procurementRejectRecon(id, t)
-  ElMessage.success('已驳回至供应商')
-  rejectDialog.value = false
-  await loadData()
+  try {
+    await invoiceApi.procurementRejectRecon(id, t)
+    ElMessage.success('已驳回至供应商')
+    rejectDialog.value = false
+    await loadData()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '驳回失败')
+  }
 }
 
 async function submitDispute() {
@@ -83,16 +172,32 @@ async function submitDispute() {
     ElMessage.warning('请填写异议说明')
     return
   }
-  await invoiceApi.procurementDisputeRecon(id, t)
-  ElMessage.success('已记录异议')
-  disputeDialog.value = false
-  await loadData()
+  try {
+    await invoiceApi.procurementDisputeRecon(id, t)
+    ElMessage.success('已记录异议')
+    disputeDialog.value = false
+    await loadData()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '提交失败')
+  }
 }
 
 async function reopenRecon(id: number) {
-  await invoiceApi.reopenRecon(id)
-  ElMessage.success('已重新打开，待供应商确认')
-  await loadData()
+  try {
+    await invoiceApi.reopenRecon(id)
+    ElMessage.success('已重新打开，待供应商确认')
+    await loadData()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '操作失败')
+  }
 }
 </script>
 
@@ -103,6 +208,8 @@ async function reopenRecon(id: number) {
       <el-select v-model="orgId" placeholder="采购组织" style="width: 220px">
         <el-option v-for="o in orgs" :key="o.id" :label="`${o.code} ${o.name}`" :value="o.id" />
       </el-select>
+      <el-button type="primary" @click="openCreateRecon">新建对账</el-button>
+      <span class="sub">甄云类：供应商也可在门户<strong>发起对账</strong>（直接进入待采购确认）；此处为采购代建，生成后待供应商确认。</span>
     </div>
     <el-table :data="rows" stripe>
       <template #empty>
@@ -175,6 +282,40 @@ async function reopenRecon(id: number) {
       </template>
     </el-dialog>
 
+    <el-dialog v-model="createOpen" title="新建对账（采购代建）" width="560px" destroy-on-close>
+      <p class="dialog-hint">选择供应商与对账期间，系统将汇总该期间 PO/收货/已确认发票金额；对账单为「待供应商确认」状态。</p>
+      <el-form label-width="100px">
+        <el-form-item label="供应商" required>
+          <el-select v-model="createForm.supplierId" filterable style="width: 100%" placeholder="选择供应商">
+            <el-option
+              v-for="s in (suppliersForOrg.length ? suppliersForOrg : suppliers)"
+              :key="s.id"
+              :label="`${s.code} ${s.name}`"
+              :value="s.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="采购组织" required>
+          <el-select v-model="createForm.procurementOrgId" style="width: 100%">
+            <el-option v-for="o in orgs" :key="o.id" :label="`${o.code} ${o.name}`" :value="o.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="期间起" required>
+          <el-date-picker v-model="createForm.periodFrom" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="期间止" required>
+          <el-date-picker v-model="createForm.periodTo" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="createForm.remark" type="textarea" :rows="2" placeholder="选填" maxlength="1000" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createOpen = false">取消</el-button>
+        <el-button type="primary" :loading="createSubmitting" @click="submitCreateRecon">创建</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="disputeDialog" title="对账异议" width="520px" destroy-on-close @closed="reasonText = ''">
       <p class="dialog-hint">异议后进入「争议」状态，可与供应商协商后使用「重新打开」继续流程。</p>
       <el-input v-model="reasonText" type="textarea" :rows="4" placeholder="异议说明（必填）" maxlength="1000" show-word-limit />
@@ -188,8 +329,9 @@ async function reopenRecon(id: number) {
 
 <style scoped>
 .page { padding: 16px; }
-.toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.toolbar { display: flex; align-items: baseline; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
 .title { font-size: 18px; font-weight: 600; }
+.sub { font-size: 13px; color: var(--el-text-color-secondary); max-width: 560px; line-height: 1.45; }
 .hint { margin-left: 4px; cursor: help; color: var(--el-color-info); font-size: 12px; }
 .by { color: var(--el-text-color-secondary); font-size: 12px; }
 .muted { color: var(--el-text-color-secondary); font-size: 13px; }

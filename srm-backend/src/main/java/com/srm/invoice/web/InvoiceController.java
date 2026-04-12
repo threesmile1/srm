@@ -138,7 +138,7 @@ public class InvoiceController {
     public ReconSummary createRecon(@Valid @RequestBody ReconCreateRequest req) {
         Reconciliation recon = invoiceService.createReconciliation(
                 req.supplierId(), req.procurementOrgId(),
-                req.periodFrom(), req.periodTo(), req.remark());
+                req.periodFrom(), req.periodTo(), req.remark(), false);
         return ReconSummary.from(recon);
     }
 

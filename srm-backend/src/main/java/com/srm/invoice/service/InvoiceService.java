@@ -444,18 +444,34 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<Reconciliation> listReconByOrg(Long orgId) {
-        return reconciliationRepository.findByProcurementOrgIdOrderByIdDesc(orgId);
+        return reconciliationRepository.findWithDetailsByProcurementOrgIdOrderByIdDesc(orgId);
     }
 
     @Transactional(readOnly = true)
     public List<Reconciliation> listReconBySupplier(Long supplierId) {
-        return reconciliationRepository.findBySupplierIdOrderByIdDesc(supplierId);
+        return reconciliationRepository.findWithDetailsBySupplierIdOrderByIdDesc(supplierId);
     }
 
+    /**
+     * 事务内在返回给 API 层组装 {@link InvoiceController.ReconSummary} 前补全 Supplier 标量属性。
+     * open-in-view=false 时，仅调用 {@link Supplier#getId()} 不会初始化懒代理，会话外 {@code getCode()}/{@code getName()} 会失败。
+     */
+    private static void touchSupplierForSummary(Reconciliation r) {
+        Supplier s = r.getSupplier();
+        if (s != null) {
+            s.getCode();
+            s.getName();
+        }
+    }
+
+    /**
+     * @param supplierInitiated true：甄云类「月末供应商在 SRM 发起对账」→ 生成后直接进入待采购确认；
+     *                          false：采购侧生成对账单 → 待供应商确认
+     */
     @Transactional
     public Reconciliation createReconciliation(Long supplierId, Long procurementOrgId,
                                                 LocalDate periodFrom, LocalDate periodTo,
-                                                String remark) {
+                                                String remark, boolean supplierInitiated) {
         Supplier supplier = masterDataService.requireSupplier(supplierId);
         OrgUnit org = orgUnitRepository.findById(procurementOrgId)
                 .orElseThrow(() -> new NotFoundException("采购组织不存在"));
@@ -489,12 +505,23 @@ public class InvoiceService {
         recon.setGrAmount(grAmt);
         recon.setInvoiceAmount(invAmt);
         recon.setDiffAmount(diffGrVsInv);
-        recon.setStatus(ReconStatus.PENDING_SUPPLIER);
+        recon.setStatus(supplierInitiated ? ReconStatus.PENDING_PROCUREMENT : ReconStatus.PENDING_SUPPLIER);
         recon.setRemark(remark);
 
         Reconciliation saved = reconciliationRepository.save(recon);
-        auditService.log(null, null, "CREATE_RECON", "RECONCILIATION", saved.getId(),
+        auditService.log(null, null, supplierInitiated ? "CREATE_RECON_BY_SUPPLIER" : "CREATE_RECON_BY_PROCUREMENT",
+                "RECONCILIATION", saved.getId(),
                 "reconNo=" + saved.getReconNo(), null);
+        if (supplierInitiated) {
+            staffNotificationService.notifyProcurementOrgStakeholders(
+                    procurementOrgId,
+                    "供应商发起对账",
+                    "供应商 " + supplier.getName() + " 已发起对账单 " + saved.getReconNo()
+                            + "（期间 " + periodFrom + "～" + periodTo + "），请核对后确认。",
+                    "RECON_SUPPLIER_INITIATED",
+                    "RECONCILIATION",
+                    saved.getId());
+        }
         return saved;
     }
 
@@ -521,6 +548,7 @@ public class InvoiceService {
                 "RECON_SUPPLIER_CONFIRMED",
                 "RECONCILIATION",
                 saved.getId());
+        touchSupplierForSummary(saved);
         return saved;
     }
 
@@ -551,6 +579,7 @@ public class InvoiceService {
         } catch (Exception e) {
             log.warn("对账确认后写入供应商通知失败: {}", e.getMessage());
         }
+        touchSupplierForSummary(saved);
         return saved;
     }
 
@@ -594,6 +623,7 @@ public class InvoiceService {
                 "RECON_DISPUTED",
                 "RECONCILIATION",
                 saved.getId());
+        touchSupplierForSummary(saved);
         return saved;
     }
 
@@ -625,6 +655,7 @@ public class InvoiceService {
         } catch (Exception e) {
             log.warn("对账驳回后写入供应商通知失败: {}", e.getMessage());
         }
+        touchSupplierForSummary(saved);
         return saved;
     }
 
@@ -657,6 +688,7 @@ public class InvoiceService {
         } catch (Exception e) {
             log.warn("对账异议后写入供应商通知失败: {}", e.getMessage());
         }
+        touchSupplierForSummary(saved);
         return saved;
     }
 
@@ -686,6 +718,7 @@ public class InvoiceService {
         } catch (Exception e) {
             log.warn("对账重新打开后写入供应商通知失败: {}", e.getMessage());
         }
+        touchSupplierForSummary(saved);
         return saved;
     }
 
