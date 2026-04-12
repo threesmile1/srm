@@ -51,6 +51,8 @@ export type GrSummary = {
   hasAsnShipment?: boolean
   /** 关联订单是否存在已提交的发货通知（收货行可能尚未关联 ASN） */
   purchaseOrderHasSubmittedAsn?: boolean
+  /** 本收货单关联的发货通知单号，多份时逗号分隔 */
+  asnSummary?: string
 }
 
 /** 已有发货通知、尚未创建任何收货单的采购订单（列表「待收货的发货通知」待建收货） */

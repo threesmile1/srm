@@ -20,10 +20,10 @@ const rows = ref<GrSummary[]>([])
 const openPoHints = ref<OpenPoAsnReceiptHint[]>([])
 
 /**
+ * 待收货的发货通知（默认）：订单有已提交发货通知且尚未收清；含「仅有发货通知、尚未建收货单」的待办行
  * 全部：当前采购组织下全部收货单
- * 待收货的发货通知：订单有已提交发货通知且尚未收清；含「仅有发货通知、尚未建收货单」的待办行
  */
-const listTab = ref<'all' | 'waitReceive'>('all')
+const listTab = ref<'all' | 'waitReceive'>('waitReceive')
 
 type GrListRow =
   | { rowKind: 'GR'; gr: GrSummary }
@@ -53,6 +53,17 @@ const displayRows = computed((): GrListRow[] => {
 const tableRef = ref()
 const drawer = ref(false)
 const detail = ref<GrDetail | null>(null)
+
+/** 明细抽屉顶部：从行上的 ASN 去重拼接 */
+const detailAsnSummary = computed(() => {
+  const d = detail.value
+  if (!d?.lines?.length) return ''
+  const set = new Set<string>()
+  for (const ln of d.lines) {
+    if (ln.asnNo) set.add(ln.asnNo)
+  }
+  return set.size ? [...set].join(', ') : ''
+})
 
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
@@ -127,8 +138,8 @@ async function exportSelected() {
       <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
     <el-tabs v-model="listTab" class="list-tabs">
-      <el-tab-pane label="全部" name="all" />
       <el-tab-pane label="待收货的发货通知" name="waitReceive" />
+      <el-tab-pane label="全部" name="all" />
     </el-tabs>
     <p v-if="listTab === 'waitReceive'" class="tab-hint">
       含「仅有发货通知、尚未登记收货单」的待办；已有收货单且关联 ASN 或订单侧有发货通知的也会列出。
@@ -156,9 +167,10 @@ async function exportSelected() {
           {{ row.rowKind === 'OPEN_PO' ? row.open.poNo : row.gr.poNo }}
         </template>
       </el-table-column>
-      <el-table-column label="发货通知" width="150">
+      <el-table-column label="发货通知" width="180" show-overflow-tooltip>
         <template #default="{ row }: { row: GrListRow }">
           <span v-if="row.rowKind === 'OPEN_PO'">{{ row.open.asnNo }}</span>
+          <span v-else-if="row.gr.asnSummary">{{ row.gr.asnSummary }}</span>
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
@@ -208,6 +220,9 @@ async function exportSelected() {
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="单号">{{ detail.grNo }}</el-descriptions-item>
           <el-descriptions-item label="订单">{{ detail.poNo }}</el-descriptions-item>
+          <el-descriptions-item label="发货通知">
+            {{ detailAsnSummary || '—' }}
+          </el-descriptions-item>
           <el-descriptions-item label="仓库">{{ detail.warehouseCode }}</el-descriptions-item>
           <el-descriptions-item label="日期">{{ detail.receiptDate }}</el-descriptions-item>
           <el-descriptions-item label="导出">{{ detail.exportStatus }}</el-descriptions-item>

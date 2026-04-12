@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,13 +87,36 @@ public class GoodsReceiptService {
         if (!poIds.isEmpty()) {
             poIdsWithSubmittedAsn.addAll(asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsn(poIds));
         }
+        Map<Long, String> asnSummaryByGrId = asnSummaryByGoodsReceiptId(grIds);
         return list.stream()
                 .map(g -> GoodsReceiptSummaryResponse.from(
                         g,
                         pendingByPo.getOrDefault(g.getPurchaseOrder().getId(), BigDecimal.ZERO),
                         withAsn.contains(g.getId()),
-                        poIdsWithSubmittedAsn.contains(g.getPurchaseOrder().getId())))
+                        poIdsWithSubmittedAsn.contains(g.getPurchaseOrder().getId()),
+                        asnSummaryByGrId.getOrDefault(g.getId(), "")))
                 .toList();
+    }
+
+    /** 每个收货单下去重后的 ASN 单号，逗号拼接（与列表「发货通知」列一致） */
+    private Map<Long, String> asnSummaryByGoodsReceiptId(Set<Long> grIds) {
+        if (grIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, LinkedHashSet<String>> tmp = new LinkedHashMap<>();
+        for (Object[] row : goodsReceiptLineRepository.findAsnNoRowsByGoodsReceiptIds(grIds)) {
+            Long grId = (Long) row[0];
+            String asnNo = (String) row[1];
+            if (asnNo == null || asnNo.isBlank()) {
+                continue;
+            }
+            tmp.computeIfAbsent(grId, k -> new LinkedHashSet<>()).add(asnNo.trim());
+        }
+        Map<Long, String> out = new LinkedHashMap<>();
+        for (var e : tmp.entrySet()) {
+            out.put(e.getKey(), String.join(", ", e.getValue()));
+        }
+        return out;
     }
 
     /**

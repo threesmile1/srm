@@ -15,6 +15,16 @@ public interface GoodsReceiptLineRepository extends JpaRepository<GoodsReceiptLi
     @Query("select distinct gl.goodsReceipt.id from GoodsReceiptLine gl where gl.goodsReceipt.id in :grIds and gl.asnLine is not null")
     List<Long> findGoodsReceiptIdsHavingAsnLine(@Param("grIds") Collection<Long> grIds);
 
+    /**
+     * 收货单关联的发货通知单号（多行可能对应同一通知，去重后由调用方拼接）。
+     */
+    @Query("""
+            select gl.goodsReceipt.id, n.asnNo from GoodsReceiptLine gl
+            join gl.asnLine al
+            join al.asnNotice n
+            where gl.goodsReceipt.id in :grIds""")
+    List<Object[]> findAsnNoRowsByGoodsReceiptIds(@Param("grIds") Collection<Long> grIds);
+
     @Query("select count(gl) from GoodsReceiptLine gl join gl.asnLine al where al.asnNotice.id = :asnNoticeId")
     long countByAsnNoticeId(@Param("asnNoticeId") Long asnNoticeId);
 

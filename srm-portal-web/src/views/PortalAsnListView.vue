@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { CircleClose, Document } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { portalApi, type AsnNotice } from '../api/portal'
 import DataTableEmpty from '../components/DataTableEmpty.vue'
 
 const rows = ref<AsnNotice[]>([])
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detailRow = ref<AsnNotice | null>(null)
 
 const statusLabel: Record<string, string> = {
   SUBMITTED: '已提交',
@@ -19,6 +23,24 @@ async function load() {
 onMounted(() => {
   load()
 })
+
+async function openDetail(row: AsnNotice) {
+  detailOpen.value = true
+  detailLoading.value = true
+  detailRow.value = null
+  try {
+    detailRow.value = (await portalApi.getAsn(row.id)).data
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '加载详情失败')
+    detailOpen.value = false
+  } finally {
+    detailLoading.value = false
+  }
+}
 
 async function voidNotice(row: AsnNotice) {
   if (row.status !== 'SUBMITTED') return
@@ -57,29 +79,7 @@ async function voidNotice(row: AsnNotice) {
       <template #empty>
         <DataTableEmpty />
       </template>
-      <el-table-column prop="asnNo" label="ASN 单号" width="160" />
-      <el-table-column prop="poNo" label="采购订单" width="160" />
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          {{ statusLabel[row.status] ?? row.status }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="shipDate" label="发货日" width="120" />
-      <el-table-column prop="etaDate" label="预计到货" width="120" />
-      <el-table-column label="操作" width="100" fixed="right">
-        <template #default="{ row }">
-          <el-button
-            v-if="row.status === 'SUBMITTED'"
-            link
-            type="danger"
-            @click="voidNotice(row)"
-          >
-            作废
-          </el-button>
-          <span v-else class="op-muted">—</span>
-        </template>
-      </el-table-column>
-      <el-table-column type="expand">
+      <el-table-column type="expand" width="48">
         <template #default="{ row }">
           <el-table :data="row.lines" size="small">
             <el-table-column prop="poLineNo" label="订单行" width="80" />
@@ -89,7 +89,59 @@ async function voidNotice(row: AsnNotice) {
           </el-table>
         </template>
       </el-table-column>
+      <el-table-column prop="asnNo" label="ASN 单号" width="160" min-width="140" />
+      <el-table-column prop="poNo" label="采购订单" width="160" min-width="140" />
+      <el-table-column label="状态" width="100">
+        <template #default="{ row }">
+          {{ statusLabel[row.status] ?? row.status }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="shipDate" label="发货日" width="120" />
+      <el-table-column prop="etaDate" label="预计到货" width="120" />
+      <el-table-column label="操作" width="200" fixed="right" align="center">
+        <template #default="{ row }">
+          <div class="op-cell">
+            <el-button type="primary" link size="small" :icon="Document" @click="openDetail(row)">
+              详情
+            </el-button>
+            <el-button
+              v-if="row.status === 'SUBMITTED'"
+              class="void-btn"
+              type="danger"
+              plain
+              size="small"
+              :icon="CircleClose"
+              @click="voidNotice(row)"
+            >
+              作废
+            </el-button>
+          </div>
+        </template>
+      </el-table-column>
     </el-table>
+
+    <el-drawer v-model="detailOpen" title="发货通知详情" size="520px" destroy-on-close>
+      <el-skeleton v-if="detailLoading" :rows="6" animated />
+      <template v-else-if="detailRow">
+        <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item label="ASN 单号">{{ detailRow.asnNo }}</el-descriptions-item>
+          <el-descriptions-item label="采购订单">{{ detailRow.poNo }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ statusLabel[detailRow.status] ?? detailRow.status }}</el-descriptions-item>
+          <el-descriptions-item label="发货日">{{ detailRow.shipDate }}</el-descriptions-item>
+          <el-descriptions-item label="预计到货">{{ detailRow.etaDate ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="承运商">{{ detailRow.carrier ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="运单号">{{ detailRow.trackingNo ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detailRow.remark ?? '—' }}</el-descriptions-item>
+        </el-descriptions>
+        <div class="detail-lines-title">发货明细</div>
+        <el-table :data="detailRow.lines" size="small" stripe border style="width: 100%">
+          <el-table-column prop="poLineNo" label="订单行" width="72" />
+          <el-table-column prop="materialCode" label="物料" width="110" />
+          <el-table-column prop="materialName" label="名称" min-width="120" />
+          <el-table-column prop="shipQty" label="发货量" width="90" />
+        </el-table>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -118,5 +170,44 @@ async function voidNotice(row: AsnNotice) {
 }
 .op-muted {
   color: var(--el-text-color-placeholder);
+}
+
+.op-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.detail-desc {
+  margin-bottom: 12px;
+}
+
+.detail-lines-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--el-text-color-regular);
+}
+
+/* 作废：浅色描边 + 悬停略加深，比纯文字链接更易识别、易点击 */
+.void-btn {
+  padding: 5px 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.void-btn:hover {
+  color: var(--el-color-danger);
+  border-color: var(--el-color-danger);
+  background-color: var(--el-color-danger-light-9);
+}
+.void-btn:focus-visible {
+  outline: 2px solid var(--el-color-danger-light-5);
+  outline-offset: 1px;
 }
 </style>

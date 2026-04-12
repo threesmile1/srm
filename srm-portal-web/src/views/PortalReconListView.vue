@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/http'
 import { portalReconApi, type ReconSummary } from '../api/invoice'
 import DataTableEmpty from '../components/DataTableEmpty.vue'
@@ -101,6 +101,34 @@ async function submitCreate() {
   }
 }
 
+function canWithdraw(row: ReconSummary) {
+  return row.status === 'PENDING_PROCUREMENT' && !row.supplierConfirmedAt
+}
+
+async function withdrawRecon(row: ReconSummary) {
+  if (!canWithdraw(row)) return
+  try {
+    await ElMessageBox.confirm(
+      `确定撤回对账单 ${row.reconNo}？撤回后不可恢复，如需对账请重新「发起对账」。`,
+      '撤回对账单',
+      { type: 'warning', confirmButtonText: '撤回', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await portalReconApi.withdraw(row.id)
+    ElMessage.success('已撤回，可重新发起对账')
+    await load()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '撤回失败')
+  }
+}
+
 async function supplierConfirm(row: ReconSummary) {
   try {
     await portalReconApi.supplierConfirm(row.id)
@@ -149,7 +177,7 @@ async function submitDispute() {
       <span class="title">对账</span>
       <el-button type="primary" @click="openCreate">发起对账</el-button>
       <span class="sub">
-        对账按<strong>收货月</strong>汇总；甄云类流程通常由供应商在月末发起，采购核对；采购也可在管理端生成对账单，则您需对采购出具的账单做「确认」或「异议」。
+        对账按<strong>收货月</strong>汇总；自行发起有误时，在「待采购确认」且未确认过采购单前可<strong>撤回</strong>后重新发起。采购出具的对账单请用「确认」或「异议」。
       </span>
     </div>
     <el-table :data="rows" stripe>
@@ -194,7 +222,18 @@ async function submitDispute() {
             <el-button link type="primary" @click="supplierConfirm(row)">供应商确认</el-button>
             <el-button link type="danger" @click="openDispute(row.id)">异议</el-button>
           </template>
-          <span v-else-if="row.status === 'PENDING_PROCUREMENT'" class="muted">已提交，待采购处理</span>
+          <template v-else-if="row.status === 'PENDING_PROCUREMENT'">
+            <span class="muted">已提交，待采购处理</span>
+            <el-button
+              v-if="canWithdraw(row)"
+              link
+              type="danger"
+              style="margin-left: 8px"
+              @click="withdrawRecon(row)"
+            >
+              撤回
+            </el-button>
+          </template>
           <span v-else-if="row.status === 'DISPUTED'" class="muted">争议处理中</span>
           <span v-else class="muted">—</span>
         </template>

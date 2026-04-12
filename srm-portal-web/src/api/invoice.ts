@@ -134,4 +134,6 @@ export const portalReconApi = {
     api.post<ReconSummary>(`/api/v1/portal/reconciliations/${id}/supplier-confirm`),
   supplierDispute: (id: number, reason: string) =>
     api.post<ReconSummary>(`/api/v1/portal/reconciliations/${id}/supplier-dispute`, { reason }),
+  /** 撤回自行发起、待采购尚未处理的对账单，撤回后列表不再展示，可重新发起对账 */
+  withdraw: (id: number) => api.post<ReconSummary>(`/api/v1/portal/reconciliations/${id}/withdraw`),
 }

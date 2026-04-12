@@ -18,4 +18,6 @@ public enum ReconStatus {
     CONFIRMED,
     /** 争议/例外（保留扩展） */
     DISPUTED,
+    /** 已撤回/作废（如供应商撤回自行发起的对账单） */
+    CANCELLED,
 }

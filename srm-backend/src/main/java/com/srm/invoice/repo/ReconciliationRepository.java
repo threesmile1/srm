@@ -1,5 +1,6 @@
 package com.srm.invoice.repo;
 
+import com.srm.invoice.domain.ReconStatus;
 import com.srm.invoice.domain.Reconciliation;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,13 +14,17 @@ public interface ReconciliationRepository extends JpaRepository<Reconciliation, 
             select distinct r from Reconciliation r
             join fetch r.supplier join fetch r.procurementOrg
             where r.procurementOrg.id = :orgId
+            and r.status <> :cancelled
             order by r.id desc""")
-    List<Reconciliation> findWithDetailsByProcurementOrgIdOrderByIdDesc(@Param("orgId") Long orgId);
+    List<Reconciliation> findWithDetailsByProcurementOrgIdOrderByIdDesc(
+            @Param("orgId") Long orgId, @Param("cancelled") ReconStatus cancelled);
 
     @Query("""
             select distinct r from Reconciliation r
             join fetch r.supplier join fetch r.procurementOrg
             where r.supplier.id = :supplierId
+            and r.status <> :cancelled
             order by r.id desc""")
-    List<Reconciliation> findWithDetailsBySupplierIdOrderByIdDesc(@Param("supplierId") Long supplierId);
+    List<Reconciliation> findWithDetailsBySupplierIdOrderByIdDesc(
+            @Param("supplierId") Long supplierId, @Param("cancelled") ReconStatus cancelled);
 }

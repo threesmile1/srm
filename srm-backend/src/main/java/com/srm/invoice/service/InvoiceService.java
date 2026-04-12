@@ -444,12 +444,12 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<Reconciliation> listReconByOrg(Long orgId) {
-        return reconciliationRepository.findWithDetailsByProcurementOrgIdOrderByIdDesc(orgId);
+        return reconciliationRepository.findWithDetailsByProcurementOrgIdOrderByIdDesc(orgId, ReconStatus.CANCELLED);
     }
 
     @Transactional(readOnly = true)
     public List<Reconciliation> listReconBySupplier(Long supplierId) {
-        return reconciliationRepository.findWithDetailsBySupplierIdOrderByIdDesc(supplierId);
+        return reconciliationRepository.findWithDetailsBySupplierIdOrderByIdDesc(supplierId, ReconStatus.CANCELLED);
     }
 
     /**
@@ -558,12 +558,40 @@ public class InvoiceService {
         return saved;
     }
 
+    /**
+     * 供应商撤回自行发起的对账单：仅 {@link ReconStatus#PENDING_PROCUREMENT} 且
+     * {@link Reconciliation#getSupplierConfirmedAt()} 为空（未确认过采购出具的对账单）。
+     */
+    @Transactional
+    public Reconciliation supplierWithdrawReconciliation(Long reconId, Long supplierId) {
+        Reconciliation recon = reconciliationRepository.findById(reconId)
+                .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (!recon.getSupplier().getId().equals(supplierId)) {
+            throw new ForbiddenException("无权操作该对账单");
+        }
+        if (recon.getStatus() != ReconStatus.PENDING_PROCUREMENT) {
+            throw new BadRequestException("仅「待采购确认」且采购尚未处理时可撤回");
+        }
+        if (recon.getSupplierConfirmedAt() != null) {
+            throw new BadRequestException("已对采购出具的对账单做过确认，不可撤回；请联系采购驳回");
+        }
+        recon.setStatus(ReconStatus.CANCELLED);
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "SUPPLIER_WITHDRAW_RECON", "RECONCILIATION", reconId,
+                "reconNo=" + recon.getReconNo(), null);
+        touchSupplierForSummary(saved);
+        return saved;
+    }
+
     @Transactional
     public Reconciliation confirmReconciliationByProcurement(Long id) {
         Reconciliation recon = reconciliationRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("对账单不存在"));
         if (recon.getStatus() == ReconStatus.CONFIRMED) {
             throw new BadRequestException("对账单已确认");
+        }
+        if (recon.getStatus() == ReconStatus.CANCELLED) {
+            throw new BadRequestException("对账单已撤回/作废");
         }
         if (recon.getStatus() != ReconStatus.PENDING_PROCUREMENT) {
             throw new BadRequestException("须待供应商确认后，采购方可确认");

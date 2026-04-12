@@ -67,6 +67,16 @@ public class PortalReconciliationController {
         return InvoiceController.ReconSummary.from(r);
     }
 
+    /**
+     * 撤回自行发起、待采购尚未处理的对账单（误发起时可删除后重新发起）。
+     */
+    @PostMapping("/{id}/withdraw")
+    public InvoiceController.ReconSummary withdraw(@PathVariable Long id, HttpSession session) {
+        Long sid = requireSupplierId(session);
+        Reconciliation r = invoiceService.supplierWithdrawReconciliation(id, sid);
+        return InvoiceController.ReconSummary.from(r);
+    }
+
     public record PortalReconCreateRequest(
             @NotNull Long procurementOrgId,
             @NotNull LocalDate periodFrom,

@@ -17,14 +17,17 @@ public record GoodsReceiptSummaryResponse(
         String pendingReceiptQty,
         /** 是否存在至少一行关联发货通知（ASN） */
         boolean hasAsnShipment,
-        /** 关联采购订单是否存在已提交的发货通知（含本单未关联 ASN 行的情况） */
-        boolean purchaseOrderHasSubmittedAsn
+        /** 关联采购订单是否存在已提交的发货通知（收货行可能尚未关联 ASN） */
+        boolean purchaseOrderHasSubmittedAsn,
+        /** 本单关联的发货通知单号，多份时英文逗号分隔；无 ASN 行为空串 */
+        String asnSummary
 ) {
     public static GoodsReceiptSummaryResponse from(
             GoodsReceipt g,
             BigDecimal pendingReceiptQtyOnPo,
             boolean hasAsnShipment,
-            boolean purchaseOrderHasSubmittedAsn) {
+            boolean purchaseOrderHasSubmittedAsn,
+            String asnSummary) {
         BigDecimal p = pendingReceiptQtyOnPo != null ? pendingReceiptQtyOnPo : BigDecimal.ZERO;
         return new GoodsReceiptSummaryResponse(
                 g.getId(),
@@ -37,7 +40,8 @@ public record GoodsReceiptSummaryResponse(
                 g.getExportStatus().name(),
                 p.stripTrailingZeros().toPlainString(),
                 hasAsnShipment,
-                purchaseOrderHasSubmittedAsn
+                purchaseOrderHasSubmittedAsn,
+                asnSummary != null ? asnSummary : ""
         );
     }
 }
