@@ -31,11 +31,19 @@ export type InvLineResponse = {
   goodsReceiptId: number | null
 }
 
+export type InvoiceAttachmentItem = {
+  id: number
+  originalName: string
+  contentType: string | null
+  fileSize: number
+}
+
 export type InvoiceDetail = InvoiceSummary & {
   procurementOrgId: number
   procurementOrgCode: string
   remark: string | null
   lines: InvLineResponse[]
+  attachments: InvoiceAttachmentItem[]
 }
 
 export type ReconSummary = {
@@ -64,6 +72,11 @@ export type ReconSummary = {
   procurementRejectReason: string | null
 }
 
+/** 浏览器打开即可下载（需已登录采购端，同源 Cookie） */
+export function invoiceAttachmentDownloadUrl(invoiceId: number, attachmentId: number) {
+  return `/api/v1/invoices/${invoiceId}/attachments/${attachmentId}/file`
+}
+
 export const invoiceApi = {
   list: (params: { procurementOrgId?: number; supplierId?: number }) =>
     api.get<InvoiceSummary[]>('/api/v1/invoices', { params }),
@@ -89,7 +102,7 @@ export const invoiceApi = {
       goodsReceiptId?: number
     }[]
   }) => api.post<InvoiceDetail>('/api/v1/invoices', body),
-  confirm: (id: number) => api.post<InvoiceDetail>(`/api/v1/invoices/${id}/confirm`),
+  confirm: (id: number) => api.post<InvoiceDetail>(`/api/v1/invoices/${id}/confirm`, {}),
   reject: (id: number, reason?: string) =>
     api.post<InvoiceDetail>(`/api/v1/invoices/${id}/reject`, { reason }),
   listRecon: (params: { procurementOrgId?: number; supplierId?: number }) =>

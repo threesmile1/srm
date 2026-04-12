@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElLoading } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { invoiceApi, type InvoiceSummary } from '../../api/invoice'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
+import { useAuthStore } from '../../stores/auth'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
 const router = useRouter()
+const auth = useAuthStore()
 const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
-usePersistedProcurementOrg(orgId, orgs, 'invoice-list')
+usePersistedProcurementOrg(orgId, orgs, 'invoice-list', () => auth.user?.defaultProcurementOrgId ?? null)
 const rows = ref<InvoiceSummary[]>([])
 
 const statusMap: Record<string, string> = {
@@ -37,18 +39,42 @@ async function loadData() {
 watch(orgId, () => loadData())
 onMounted(async () => { await loadOrgs(); await loadData() })
 
-function goDetail(id: number) { router.push(`/invoice/${id}`) }
+function goDetail(id: number) {
+  router.push(`/invoice/${id}`)
+}
+
+function apiErrorMessage(e: unknown): string {
+  if (e && typeof e === 'object' && 'response' in e) {
+    const d = (e as { response?: { data?: { error?: string } } }).response?.data
+    if (d?.error) return d.error
+  }
+  return ''
+}
 
 async function confirm(id: number) {
-  await invoiceApi.confirm(id)
-  ElMessage.success('已确认')
-  await loadData()
+  const loading = ElLoading.service({ lock: true, text: '确认中…' })
+  try {
+    await invoiceApi.confirm(id)
+    ElMessage.success('已确认')
+    await loadData()
+  } catch (e: unknown) {
+    ElMessage.error(apiErrorMessage(e) || '确认失败，请稍后重试或查看网络')
+  } finally {
+    loading.close()
+  }
 }
 
 async function reject(id: number) {
-  await invoiceApi.reject(id)
-  ElMessage.success('已退回')
-  await loadData()
+  const loading = ElLoading.service({ lock: true, text: '处理中…' })
+  try {
+    await invoiceApi.reject(id)
+    ElMessage.success('已退回')
+    await loadData()
+  } catch (e: unknown) {
+    ElMessage.error(apiErrorMessage(e) || '退回失败，请稍后重试或查看网络')
+  } finally {
+    loading.close()
+  }
 }
 </script>
 
@@ -59,6 +85,7 @@ async function reject(id: number) {
       <el-select v-model="orgId" placeholder="采购组织" style="width: 220px">
         <el-option v-for="o in orgs" :key="o.id" :label="`${o.code} ${o.name}`" :value="o.id" />
       </el-select>
+      <span v-if="orgId != null" class="hint">列表按所选采购组织过滤，需与供应商开票时选择的组织一致。</span>
     </div>
     <el-table :data="rows" stripe @row-dblclick="(row: InvoiceSummary) => goDetail(row.id)">
       <template #empty>
@@ -82,9 +109,9 @@ async function reject(id: number) {
       </el-table-column>
       <el-table-column label="操作" width="160">
         <template #default="{ row }">
-          <el-button link type="primary" @click="goDetail(row.id)">详情</el-button>
-          <el-button v-if="row.status === 'SUBMITTED'" link type="success" @click="confirm(row.id)">确认</el-button>
-          <el-button v-if="row.status === 'SUBMITTED'" link type="danger" @click="reject(row.id)">退回</el-button>
+          <el-button link type="primary" @click.stop="goDetail(row.id)">详情</el-button>
+          <el-button v-if="row.status === 'SUBMITTED'" link type="success" @click.stop="confirm(row.id)">确认</el-button>
+          <el-button v-if="row.status === 'SUBMITTED'" link type="danger" @click.stop="reject(row.id)">退回</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -95,4 +122,5 @@ async function reject(id: number) {
 .page { padding: 16px; }
 .toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .title { font-size: 18px; font-weight: 600; }
+.hint { font-size: 13px; color: var(--el-text-color-secondary); max-width: 420px; line-height: 1.4; }
 </style>

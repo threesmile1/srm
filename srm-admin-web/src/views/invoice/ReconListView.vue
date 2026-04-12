@@ -4,11 +4,13 @@ import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { invoiceApi, type ReconSummary } from '../../api/invoice'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
+import { useAuthStore } from '../../stores/auth'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
+const auth = useAuthStore()
 const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
-usePersistedProcurementOrg(orgId, orgs, 'recon-list')
+usePersistedProcurementOrg(orgId, orgs, 'recon-list', () => auth.user?.defaultProcurementOrgId ?? null)
 const rows = ref<ReconSummary[]>([])
 
 const statusMap: Record<string, string> = {

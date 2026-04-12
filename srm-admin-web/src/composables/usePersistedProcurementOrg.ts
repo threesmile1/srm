@@ -6,11 +6,13 @@ export const PROC_ORG_STORAGE_PREFIX = 'srm.admin.procOrg.'
 /**
  * 在采购组织列表加载后恢复上次选择的组织，并在变更时写入 sessionStorage。
  * @param pageKey 各页面唯一键，如 po-list、gr-list
+ * @param preferredOrgId 无本地记忆时优先使用的组织（如当前登录用户的默认采购组织）
  */
 export function usePersistedProcurementOrg(
   orgId: Ref<number | null>,
   orgs: Ref<{ id: number }[]>,
   pageKey: string,
+  preferredOrgId?: () => number | null | undefined,
 ) {
   const key = PROC_ORG_STORAGE_PREFIX + pageKey
 
@@ -26,6 +28,11 @@ export function usePersistedProcurementOrg(
       }
       if (saved != null) {
         orgId.value = saved
+        return
+      }
+      const pref = preferredOrgId?.()
+      if (pref != null && list.some((o) => o.id === pref)) {
+        orgId.value = pref
         return
       }
       if (orgId.value == null || !list.some((o) => o.id === orgId.value)) {

@@ -39,4 +39,20 @@ public interface PurchaseOrderLineRepository extends JpaRepository<PurchaseOrder
             group by l.purchaseOrder.id
             """)
     List<Object[]> sumPendingReceiptQtyByPurchaseOrderIds(@Param("poIds") Set<Long> poIds);
+
+    /**
+     * 供应商开票选行：已发布或已关闭订单、本组织、已有实收数量的订单行。
+     * 说明：收货后订单常被采购关闭（CLOSED），若仅筛 RELEASED 会导致「有收货但选行无数据」。
+     */
+    @EntityGraph(attributePaths = {"purchaseOrder", "purchaseOrder.procurementOrg", "purchaseOrder.supplier", "material"})
+    @Query("""
+            select l from PurchaseOrderLine l
+            join l.purchaseOrder po
+            where po.supplier.id = :sid and po.procurementOrg.id = :oid
+            and po.status in (com.srm.po.domain.PoStatus.RELEASED, com.srm.po.domain.PoStatus.CLOSED)
+            and coalesce(l.receivedQty, 0) > 0
+            order by po.id desc, l.lineNo asc
+            """)
+    List<PurchaseOrderLine> findReleasedWithReceiptBySupplierAndOrg(@Param("sid") Long supplierId,
+                                                                   @Param("oid") Long procurementOrgId);
 }

@@ -9,11 +9,13 @@ import com.srm.foundation.service.AuditService;
 import com.srm.notification.service.NotificationService;
 import com.srm.notification.service.StaffNotificationService;
 import com.srm.invoice.domain.Invoice;
+import com.srm.invoice.domain.InvoiceAttachment;
 import com.srm.invoice.domain.InvoiceKind;
 import com.srm.invoice.domain.InvoiceLine;
 import com.srm.invoice.domain.InvoiceStatus;
 import com.srm.invoice.domain.ReconStatus;
 import com.srm.invoice.domain.Reconciliation;
+import com.srm.invoice.repo.InvoiceAttachmentRepository;
 import com.srm.invoice.repo.InvoiceRepository;
 import com.srm.invoice.repo.ReconciliationRepository;
 import com.srm.master.domain.Supplier;
@@ -27,20 +29,32 @@ import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class InvoiceService {
+
+    private static final long MAX_INVOICE_ATTACHMENT_BYTES = 10L * 1024 * 1024;
 
     /** 关联订单行时，发票单价与 PO 行单价允许偏差（含税/未税口径以 PO 为准） */
     private static final BigDecimal UNIT_PRICE_TOLERANCE = new BigDecimal("0.0100");
@@ -51,6 +65,7 @@ public class InvoiceService {
     private static long reconSeq = System.currentTimeMillis() % 100000;
 
     private final InvoiceRepository invoiceRepository;
+    private final InvoiceAttachmentRepository invoiceAttachmentRepository;
     private final ReconciliationRepository reconciliationRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PurchaseOrderLineRepository purchaseOrderLineRepository;
@@ -60,6 +75,9 @@ public class InvoiceService {
     private final AuditService auditService;
     private final NotificationService notificationService;
     private final StaffNotificationService staffNotificationService;
+
+    @Value("${srm.invoice-upload-dir:${user.home}/.srm/invoice-files}")
+    private String invoiceUploadRoot;
 
     private static long invoiceSeq = System.currentTimeMillis() % 100000;
 
@@ -130,7 +148,150 @@ public class InvoiceService {
         return invoiceRepository.findBySupplierIdOrderByIdDesc(supplierId);
     }
 
+    private Path invoiceStorageRoot() {
+        return Paths.get(invoiceUploadRoot).toAbsolutePath().normalize();
+    }
+
+    private static String sanitizeAttachmentOriginalName(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "file";
+        }
+        String name = raw.replace('\\', '/');
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0 && slash < name.length() - 1) {
+            name = name.substring(slash + 1);
+        }
+        if (name.isBlank()) {
+            return "file";
+        }
+        return name.length() > 400 ? name.substring(0, 400) : name;
+    }
+
+    private static String fileExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot >= name.length() - 1) {
+            return "";
+        }
+        return name.substring(dot + 1).toLowerCase();
+    }
+
+    /**
+     * 门户上传发票扫描件/PDF（提交发票成功后调用）。
+     */
+    @Transactional
+    public InvoiceAttachmentBrief addPortalInvoiceAttachment(Long invoiceId, Long supplierId, MultipartFile file)
+            throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("请选择文件");
+        }
+        if (file.getSize() > MAX_INVOICE_ATTACHMENT_BYTES) {
+            throw new BadRequestException("附件不能超过 10MB");
+        }
+        Invoice inv = requireDetail(invoiceId);
+        if (!inv.getSupplier().getId().equals(supplierId)) {
+            throw new ForbiddenException("无权上传附件");
+        }
+        String original = sanitizeAttachmentOriginalName(file.getOriginalFilename());
+        Path root = invoiceStorageRoot();
+        Files.createDirectories(root);
+        Path dir = root.resolve(String.valueOf(invoiceId));
+        Files.createDirectories(dir);
+        String ext = fileExtension(original);
+        String storedFileName = UUID.randomUUID() + (ext.isEmpty() ? "" : "." + ext);
+        Path target = dir.resolve(storedFileName);
+        file.transferTo(target);
+        String relative = invoiceId + "/" + storedFileName;
+        InvoiceAttachment att = new InvoiceAttachment();
+        att.setInvoice(inv);
+        att.setOriginalName(original);
+        att.setContentType(file.getContentType());
+        att.setFileSize(file.getSize());
+        att.setStoredPath(relative);
+        invoiceAttachmentRepository.save(att);
+        return new InvoiceAttachmentBrief(att.getId(), att.getOriginalName(), att.getContentType(), att.getFileSize());
+    }
+
     @Transactional(readOnly = true)
+    public InvoiceAttachmentDownload openInvoiceAttachmentDownload(long invoiceId, long attachmentId,
+                                                                   Long supplierIdOrNull) {
+        InvoiceAttachment att = invoiceAttachmentRepository.findByIdAndInvoice_Id(attachmentId, invoiceId)
+                .orElseThrow(() -> new NotFoundException("附件不存在"));
+        Invoice inv = requireDetail(invoiceId);
+        if (supplierIdOrNull != null && !inv.getSupplier().getId().equals(supplierIdOrNull)) {
+            throw new ForbiddenException("无权下载此附件");
+        }
+        Path abs = invoiceStorageRoot().resolve(att.getStoredPath()).normalize();
+        Path base = invoiceStorageRoot().normalize();
+        if (!abs.startsWith(base)) {
+            throw new NotFoundException("附件路径非法");
+        }
+        if (!Files.isRegularFile(abs)) {
+            throw new NotFoundException("文件已丢失");
+        }
+        Resource resource = new FileSystemResource(abs.toFile());
+        return new InvoiceAttachmentDownload(resource, att.getOriginalName(), att.getContentType());
+    }
+
+    public record InvoiceAttachmentBrief(Long id, String originalName, String contentType, long fileSize) {}
+
+    public record InvoiceAttachmentDownload(Resource resource, String originalFileName, String contentType) {}
+
+    /**
+     * 门户开票选行：甄云类从「可对账订单行」勾选——订单已发布或已关闭、已收货，且（已收 − 已开票）&gt; 0。
+     */
+    @Transactional(readOnly = true)
+    public List<BillablePoLineRow> listBillablePoLinesForSupplier(Long supplierId, Long procurementOrgId) {
+        List<PurchaseOrderLine> lines = purchaseOrderLineRepository.findReleasedWithReceiptBySupplierAndOrg(
+                supplierId, procurementOrgId);
+        List<BillablePoLineRow> out = new ArrayList<>();
+        for (PurchaseOrderLine l : lines) {
+            BigDecimal inv = invoiceRepository.sumInvoicedQtyByPurchaseOrderLineId(l.getId());
+            if (inv == null) {
+                inv = BigDecimal.ZERO;
+            }
+            BigDecimal recv = l.getReceivedQty() != null ? l.getReceivedQty() : BigDecimal.ZERO;
+            BigDecimal rem = recv.subtract(inv);
+            if (rem.compareTo(BigDecimal.ZERO) < 0) {
+                rem = BigDecimal.ZERO;
+            }
+            PurchaseOrder po = l.getPurchaseOrder();
+            // 含 remaining=0 的行，便于门户区分「无数据」与「已开齐」
+            out.add(new BillablePoLineRow(
+                    l.getId(),
+                    po.getId(),
+                    po.getPoNo(),
+                    l.getLineNo(),
+                    l.getMaterial().getCode(),
+                    l.getMaterial().getName(),
+                    recv,
+                    inv,
+                    rem,
+                    l.getUnitPrice(),
+                    l.getUom()));
+        }
+        return out;
+    }
+
+    /** 可对账 PO 行（门户开票选行 DTO） */
+    public record BillablePoLineRow(
+            Long purchaseOrderLineId,
+            Long purchaseOrderId,
+            String poNo,
+            int lineNo,
+            String materialCode,
+            String materialName,
+            BigDecimal receivedQty,
+            BigDecimal invoicedQty,
+            BigDecimal remainingInvoiceableQty,
+            BigDecimal unitPrice,
+            String uom
+    ) {}
+
+    /**
+     * 不可标 readOnly：会被 {@link #confirmInvoice}、{@link #rejectInvoice} 等写流程调用，
+     * 嵌套事务若带 readOnly=true 可能把外层写事务标成只读，导致确认/退回无法落库。
+     */
+    @Transactional
     public Invoice requireDetail(Long id) {
         return invoiceRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("发票不存在: " + id));

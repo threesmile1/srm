@@ -14,14 +14,17 @@ import java.util.Optional;
 
 public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
+    /** 列表 DTO 需 supplier 编码/名称；避免事务外访问懒加载导致 LazyInitializationException → 500 */
+    @EntityGraph(attributePaths = "supplier")
     List<Invoice> findByProcurementOrgIdOrderByIdDesc(Long procurementOrgId);
 
+    @EntityGraph(attributePaths = "supplier")
     List<Invoice> findBySupplierIdOrderByIdDesc(Long supplierId);
 
     List<Invoice> findBySupplierIdAndStatusOrderByIdDesc(Long supplierId, InvoiceStatus status);
 
     @EntityGraph(attributePaths = {"lines", "lines.purchaseOrder", "lines.purchaseOrderLine",
-            "lines.goodsReceipt", "supplier", "procurementOrg"})
+            "lines.goodsReceipt", "supplier", "procurementOrg", "attachments"})
     Optional<Invoice> findWithDetailsById(Long id);
 
     @Query("select coalesce(sum(i.totalAmount),0) from Invoice i " +

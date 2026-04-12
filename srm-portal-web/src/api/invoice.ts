@@ -30,11 +30,40 @@ export type InvLineResponse = {
   goodsReceiptId: number | null
 }
 
+export type InvoiceAttachmentItem = {
+  id: number
+  originalName: string
+  contentType: string | null
+  fileSize: number
+}
+
 export type InvoiceDetail = InvoiceSummary & {
   procurementOrgId: number
   procurementOrgCode: string
   remark: string | null
   lines: InvLineResponse[]
+  attachments: InvoiceAttachmentItem[]
+}
+
+/** 门户下载附件（需已登录且为发票所属供应商） */
+export function portalInvoiceAttachmentDownloadUrl(invoiceId: number, attachmentId: number) {
+  const base = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
+  return `${base}/api/v1/portal/invoices/${invoiceId}/attachments/${attachmentId}/file`
+}
+
+/** 门户开票：可对账 PO 行（甄云类选行） */
+export type BillablePoLine = {
+  purchaseOrderLineId: number
+  purchaseOrderId: number
+  poNo: string
+  lineNo: number
+  materialCode: string
+  materialName: string
+  receivedQty: string
+  invoicedQty: string
+  remainingInvoiceableQty: string
+  unitPrice: string
+  uom: string
 }
 
 export type ReconSummary = {
@@ -62,6 +91,8 @@ export type ReconSummary = {
 
 export const portalInvoiceApi = {
   list: () => api.get<InvoiceSummary[]>('/api/v1/portal/invoices'),
+  billableLines: (procurementOrgId: number) =>
+    api.get<BillablePoLine[]>('/api/v1/portal/invoices/billable-lines', { params: { procurementOrgId } }),
   get: (id: number) => api.get<InvoiceDetail>(`/api/v1/portal/invoices/${id}`),
   create: (body: {
     procurementOrgId: number
@@ -83,6 +114,11 @@ export const portalInvoiceApi = {
       goodsReceiptId?: number
     }[]
   }) => api.post<InvoiceDetail>('/api/v1/portal/invoices', body),
+  uploadAttachment: (invoiceId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return api.post<InvoiceAttachmentItem>(`/api/v1/portal/invoices/${invoiceId}/attachments`, fd)
+  },
 }
 
 export const portalReconApi = {

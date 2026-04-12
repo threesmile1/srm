@@ -62,4 +62,7 @@ public class Invoice extends BaseEntity {
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("lineNo ASC")
     private List<InvoiceLine> lines = new ArrayList<>();
+
+    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<InvoiceAttachment> attachments = new ArrayList<>();
 }

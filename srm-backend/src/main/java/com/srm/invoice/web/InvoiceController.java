@@ -1,18 +1,28 @@
 package com.srm.invoice.web;
 
+import com.srm.foundation.web.AuthController;
 import com.srm.invoice.domain.*;
 import com.srm.invoice.service.InvoiceService;
 import com.srm.web.error.BadRequestException;
 import com.srm.invoice.service.InvoiceService.InvoiceLineInput;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -29,12 +39,23 @@ public class InvoiceController {
 
     @GetMapping("/invoices")
     public List<InvoiceSummary> listInvoices(@RequestParam(required = false) Long procurementOrgId,
-                                              @RequestParam(required = false) Long supplierId) {
+                                              @RequestParam(required = false) Long supplierId,
+                                              HttpServletRequest httpReq) {
+        Long effectiveOrgId = procurementOrgId;
+        if (effectiveOrgId == null && supplierId == null) {
+            HttpSession session = httpReq.getSession(false);
+            if (session != null) {
+                Object o = session.getAttribute(AuthController.SESSION_DEFAULT_ORG_ID);
+                if (o instanceof Long lid) {
+                    effectiveOrgId = lid;
+                }
+            }
+        }
         List<Invoice> list;
         if (supplierId != null) {
             list = invoiceService.listBySupplier(supplierId);
-        } else if (procurementOrgId != null) {
-            list = invoiceService.listByOrg(procurementOrgId);
+        } else if (effectiveOrgId != null) {
+            list = invoiceService.listByOrg(effectiveOrgId);
         } else {
             list = List.of();
         }
@@ -42,11 +63,13 @@ public class InvoiceController {
     }
 
     @GetMapping("/invoices/{id}")
+    @Transactional(readOnly = true)
     public InvoiceDetail getInvoice(@PathVariable Long id) {
         return InvoiceDetail.from(invoiceService.requireDetail(id));
     }
 
     @PostMapping("/invoices")
+    @Transactional
     public InvoiceDetail createInvoice(@Valid @RequestBody InvoiceCreateRequest req) {
         List<InvoiceLineInput> lines = req.lines().stream()
                 .map(l -> new InvoiceLineInput(l.materialCode(), l.materialName(),
@@ -63,16 +86,44 @@ public class InvoiceController {
     }
 
     @PostMapping("/invoices/{id}/confirm")
+    @Transactional
     public InvoiceDetail confirmInvoice(@PathVariable Long id) {
         invoiceService.confirmInvoice(id);
         return InvoiceDetail.from(invoiceService.requireDetail(id));
     }
 
     @PostMapping("/invoices/{id}/reject")
+    @Transactional
     public InvoiceDetail rejectInvoice(@PathVariable Long id,
                                         @RequestBody(required = false) RejectRequest req) {
         invoiceService.rejectInvoice(id, req != null ? req.reason() : null);
         return InvoiceDetail.from(invoiceService.requireDetail(id));
+    }
+
+    /** 采购端下载供应商上传的发票附件 */
+    @GetMapping("/invoices/{invoiceId}/attachments/{attachmentId}/file")
+    public ResponseEntity<Resource> downloadInvoiceAttachment(@PathVariable Long invoiceId,
+                                                              @PathVariable Long attachmentId) {
+        InvoiceService.InvoiceAttachmentDownload d =
+                invoiceService.openInvoiceAttachmentDownload(invoiceId, attachmentId, null);
+        return attachmentResponse(d);
+    }
+
+    static ResponseEntity<Resource> attachmentResponse(InvoiceService.InvoiceAttachmentDownload d) {
+        HttpHeaders headers = new HttpHeaders();
+        MediaType mt = MediaType.APPLICATION_OCTET_STREAM;
+        if (d.contentType() != null && !d.contentType().isBlank()) {
+            try {
+                mt = MediaType.parseMediaType(d.contentType());
+            } catch (Exception ignored) {
+            }
+        }
+        headers.setContentType(mt);
+        String fname = d.originalFileName() != null ? d.originalFileName() : "attachment";
+        headers.setContentDisposition(ContentDisposition.attachment()
+                .filename(fname, StandardCharsets.UTF_8)
+                .build());
+        return ResponseEntity.ok().headers(headers).body(d.resource());
     }
 
     // --- Reconciliation ---
@@ -178,9 +229,15 @@ public class InvoiceController {
             LocalDate invoiceDate, BigDecimal totalAmount, BigDecimal taxAmount,
             String currency, String status, String remark,
             String invoiceKind, String vatInvoiceCode, String vatInvoiceNumber,
-            List<InvLineResponse> lines
+            List<InvLineResponse> lines,
+            List<InvoiceAttachmentItem> attachments
     ) {
         static InvoiceDetail from(Invoice i) {
+            List<InvoiceAttachmentItem> atts = i.getAttachments() == null ? List.of()
+                    : i.getAttachments().stream()
+                    .map(a -> new InvoiceAttachmentItem(a.getId(), a.getOriginalName(),
+                            a.getContentType(), a.getFileSize()))
+                    .toList();
             return new InvoiceDetail(i.getId(), i.getInvoiceNo(),
                     i.getSupplier().getId(), i.getSupplier().getCode(), i.getSupplier().getName(),
                     i.getProcurementOrg().getId(), i.getProcurementOrg().getCode(),
@@ -188,9 +245,12 @@ public class InvoiceController {
                     i.getCurrency(), i.getStatus().name(), i.getRemark(),
                     i.getInvoiceKind().name(),
                     i.getVatInvoiceCode(), i.getVatInvoiceNumber(),
-                    i.getLines().stream().map(InvLineResponse::from).toList());
+                    i.getLines().stream().map(InvLineResponse::from).toList(),
+                    atts);
         }
     }
+
+    public record InvoiceAttachmentItem(Long id, String originalName, String contentType, long fileSize) {}
 
     public record InvLineResponse(
             Long id, int lineNo, String materialCode, String materialName,
