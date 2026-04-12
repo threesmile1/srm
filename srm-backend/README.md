@@ -5,7 +5,7 @@ SRM **后端**：Java **17**、**Spring Boot 3.4**、**MySQL 8**、**Flyway**、
 ## 环境要求
 
 - **JDK 17+**、**Maven 3.9+**
-- **MySQL 8**（**本机安装** 或 用下方 Docker 任选其一）
+- **MySQL 8**：**本机安装并启动**（本地开发的标准方式；**不用 Docker 起库**）。若本机无法安装 MySQL，可选用文末 **Docker（可选）** 或 **H2 内存库（仅快速试跑）**。
 
 ### Windows 快速安装（示例）
 
@@ -24,7 +24,7 @@ cd srm-backend
 mvn test
 ```
 
-## 本机已安装 MySQL（无 Docker）
+## 本机 MySQL（推荐，本地默认）
 
 1. 确保 MySQL 服务已启动，且监听 **`localhost:3306`**（或与 `application.yml` 中 URL 一致）。
 2. 使用 **`root`**（或其它管理员）执行初始化脚本，创建库与用户（与默认配置一致）：
@@ -44,15 +44,15 @@ mvn spring-boot:run
 
 `mvn spring-boot:run -Dspring-boot.run.profiles=dev,local`
 
-## 用 Docker 启动 MySQL（可选）
+## 用 Docker 启动 MySQL（可选，非本机标准方式）
 
-在 `srm-backend` 目录：
+仅当 **无法在本机安装 MySQL** 且本机已安装 Docker 时，可在 `srm-backend` 目录执行：
 
 ```powershell
 docker compose up -d
 ```
 
-默认：`localhost:3306`，库名 `srm`，用户/密码 `srm`/`srm`（与 `application.yml` 一致）。
+默认：`localhost:3306`，库名 `srm`，用户/密码 `srm`/`srm`（与 `application.yml` 一致）。**团队本地联调以本机 MySQL 为准时，请勿依赖此方式。**
 
 ## 运行后端
 

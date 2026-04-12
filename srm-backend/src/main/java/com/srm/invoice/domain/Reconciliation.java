@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 
 @Getter @Setter
@@ -46,8 +47,27 @@ public class Reconciliation extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private ReconStatus status = ReconStatus.DRAFT;
+    private ReconStatus status = ReconStatus.PENDING_SUPPLIER;
 
     @Column(length = 1000)
     private String remark;
+
+    @Column(name = "supplier_confirmed_at")
+    private Instant supplierConfirmedAt;
+
+    @Column(name = "procurement_confirmed_at")
+    private Instant procurementConfirmedAt;
+
+    @Column(name = "dispute_reason", length = 1000)
+    private String disputeReason;
+
+    @Column(name = "disputed_at")
+    private Instant disputedAt;
+
+    /** SUPPLIER | PROCUREMENT */
+    @Column(name = "disputed_by", length = 32)
+    private String disputedBy;
+
+    @Column(name = "procurement_reject_reason", length = 1000)
+    private String procurementRejectReason;
 }

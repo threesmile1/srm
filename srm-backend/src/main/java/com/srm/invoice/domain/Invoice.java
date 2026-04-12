@@ -47,6 +47,18 @@ public class Invoice extends BaseEntity {
     @Column(length = 1000)
     private String remark;
 
+    /** 税务发票代码（增值税纸质/电子发票票面） */
+    @Column(name = "vat_invoice_code", length = 20)
+    private String vatInvoiceCode;
+
+    /** 税务发票号码 */
+    @Column(name = "vat_invoice_number", length = 20)
+    private String vatInvoiceNumber;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "invoice_kind", nullable = false, length = 32)
+    private InvoiceKind invoiceKind = InvoiceKind.ORDINARY_VAT;
+
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("lineNo ASC")
     private List<InvoiceLine> lines = new ArrayList<>();

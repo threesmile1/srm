@@ -11,6 +11,10 @@ export type InvoiceSummary = {
   taxAmount: string
   currency: string
   status: string
+  /** ORDINARY_VAT | SPECIAL_VAT */
+  invoiceKind: string
+  vatInvoiceCode: string | null
+  vatInvoiceNumber: string | null
 }
 
 export type InvLineResponse = {
@@ -45,8 +49,19 @@ export type ReconSummary = {
   poAmount: string
   grAmount: string
   invoiceAmount: string
+  /** 收货 − 已确认发票（核心） */
   diffAmount: string
+  /** 订单 − 收货（执行差异） */
+  diffPoGrAmount: string
   status: string
+  supplierConfirmedAt: string | null
+  procurementConfirmedAt: string | null
+  varianceAlert: boolean
+  disputeReason: string | null
+  disputedAt: string | null
+  /** SUPPLIER | PROCUREMENT */
+  disputedBy: string | null
+  procurementRejectReason: string | null
 }
 
 export const invoiceApi = {
@@ -60,6 +75,9 @@ export const invoiceApi = {
     currency?: string
     taxAmount?: number
     remark?: string
+    invoiceKind?: string
+    vatInvoiceCode?: string
+    vatInvoiceNumber?: string
     lines: {
       materialCode?: string
       materialName?: string
@@ -84,4 +102,9 @@ export const invoiceApi = {
     remark?: string
   }) => api.post<ReconSummary>('/api/v1/reconciliations', body),
   confirmRecon: (id: number) => api.post<ReconSummary>(`/api/v1/reconciliations/${id}/confirm`),
+  procurementRejectRecon: (id: number, reason: string) =>
+    api.post<ReconSummary>(`/api/v1/reconciliations/${id}/procurement-reject`, { reason }),
+  procurementDisputeRecon: (id: number, reason: string) =>
+    api.post<ReconSummary>(`/api/v1/reconciliations/${id}/procurement-dispute`, { reason }),
+  reopenRecon: (id: number) => api.post<ReconSummary>(`/api/v1/reconciliations/${id}/reopen`),
 }

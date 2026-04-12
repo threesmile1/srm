@@ -11,6 +11,11 @@ const statusMap: Record<string, string> = {
   SUBMITTED: '已提交', CONFIRMED: '已确认', REJECTED: '已退回', CANCELLED: '已取消',
 }
 
+const kindMap: Record<string, string> = {
+  ORDINARY_VAT: '普票',
+  SPECIAL_VAT: '专票',
+}
+
 async function load() {
   rows.value = (await portalInvoiceApi.list()).data
 }
@@ -34,6 +39,9 @@ async function showDetail(row: InvoiceSummary) {
         <DataTableEmpty />
       </template>
       <el-table-column prop="invoiceNo" label="发票号" width="180" />
+      <el-table-column label="票种" width="72">
+        <template #default="{ row }">{{ kindMap[row.invoiceKind] || row.invoiceKind }}</template>
+      </el-table-column>
       <el-table-column prop="invoiceDate" label="开票日期" width="110" />
       <el-table-column prop="totalAmount" label="金额" width="120" />
       <el-table-column prop="taxAmount" label="税额" width="100" />
@@ -56,6 +64,9 @@ async function showDetail(row: InvoiceSummary) {
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="发票号">{{ currentDetail.invoiceNo }}</el-descriptions-item>
         <el-descriptions-item label="开票日期">{{ currentDetail.invoiceDate }}</el-descriptions-item>
+        <el-descriptions-item label="票种">{{ kindMap[currentDetail.invoiceKind] || currentDetail.invoiceKind }}</el-descriptions-item>
+        <el-descriptions-item label="税务发票代码">{{ currentDetail.vatInvoiceCode || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="税务发票号码">{{ currentDetail.vatInvoiceNumber || '—' }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ statusMap[currentDetail.status] || currentDetail.status }}</el-descriptions-item>
         <el-descriptions-item label="总金额">{{ currentDetail.totalAmount }}</el-descriptions-item>
         <el-descriptions-item label="税额">{{ currentDetail.taxAmount }}</el-descriptions-item>

@@ -17,6 +17,9 @@ const form = ref({
   currency: 'CNY',
   taxAmount: 0,
   remark: '',
+  invoiceKind: 'ORDINARY_VAT' as 'ORDINARY_VAT' | 'SPECIAL_VAT',
+  vatInvoiceCode: '',
+  vatInvoiceNumber: '',
 })
 
 type LineRow = {
@@ -55,6 +58,9 @@ async function save() {
       currency: form.value.currency,
       taxAmount: form.value.taxAmount,
       remark: form.value.remark || undefined,
+      invoiceKind: form.value.invoiceKind,
+      vatInvoiceCode: form.value.vatInvoiceCode.trim() || undefined,
+      vatInvoiceNumber: form.value.vatInvoiceNumber.trim() || undefined,
       lines: validLines.map((l) => ({
         materialCode: l.materialCode,
         materialName: l.materialName,
@@ -93,8 +99,21 @@ async function save() {
       <el-form-item label="币种">
         <el-input v-model="form.currency" style="width: 120px" />
       </el-form-item>
+      <el-form-item label="票种">
+        <el-radio-group v-model="form.invoiceKind">
+          <el-radio label="ORDINARY_VAT">增值税普票</el-radio>
+          <el-radio label="SPECIAL_VAT">增值税专票</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item label="发票代码">
+        <el-input v-model="form.vatInvoiceCode" maxlength="12" placeholder="10–12 位数字，专票必填" style="max-width: 280px" />
+      </el-form-item>
+      <el-form-item label="发票号码">
+        <el-input v-model="form.vatInvoiceNumber" maxlength="20" placeholder="8–20 位数字，专票必填" style="max-width: 280px" />
+      </el-form-item>
       <el-form-item label="税额">
         <el-input-number v-model="form.taxAmount" :min="0" :precision="2" />
+        <span class="hint">填写明细税率(%)后提交，系统按行汇总税额（与甄云类价税明细一致）</span>
       </el-form-item>
       <el-form-item label="备注">
         <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -133,4 +152,5 @@ async function save() {
 .page { padding: 16px; }
 .toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .title { font-size: 18px; font-weight: 600; }
+.hint { margin-left: 12px; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

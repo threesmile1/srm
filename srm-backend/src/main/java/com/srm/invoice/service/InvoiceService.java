@@ -8,7 +8,12 @@ import com.srm.foundation.repo.OrgUnitRepository;
 import com.srm.foundation.service.AuditService;
 import com.srm.notification.service.NotificationService;
 import com.srm.notification.service.StaffNotificationService;
-import com.srm.invoice.domain.*;
+import com.srm.invoice.domain.Invoice;
+import com.srm.invoice.domain.InvoiceKind;
+import com.srm.invoice.domain.InvoiceLine;
+import com.srm.invoice.domain.InvoiceStatus;
+import com.srm.invoice.domain.ReconStatus;
+import com.srm.invoice.domain.Reconciliation;
 import com.srm.invoice.repo.InvoiceRepository;
 import com.srm.invoice.repo.ReconciliationRepository;
 import com.srm.master.domain.Supplier;
@@ -18,6 +23,7 @@ import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.repo.PurchaseOrderLineRepository;
 import com.srm.po.repo.PurchaseOrderRepository;
 import com.srm.web.error.BadRequestException;
+import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
@@ -37,6 +44,11 @@ public class InvoiceService {
 
     /** 关联订单行时，发票单价与 PO 行单价允许偏差（含税/未税口径以 PO 为准） */
     private static final BigDecimal UNIT_PRICE_TOLERANCE = new BigDecimal("0.0100");
+
+    /** 对账「收货 vs 票」差异在容差内视为平（元） */
+    private static final BigDecimal RECON_DIFF_TOLERANCE = new BigDecimal("0.01");
+
+    private static long reconSeq = System.currentTimeMillis() % 100000;
 
     private final InvoiceRepository invoiceRepository;
     private final ReconciliationRepository reconciliationRepository;
@@ -54,6 +66,56 @@ public class InvoiceService {
     private synchronized String nextInvoiceNo() {
         invoiceSeq++;
         return "INV" + Year.now().getValue() + "-" + String.format("%06d", invoiceSeq);
+    }
+
+    private synchronized String nextReconNo() {
+        reconSeq++;
+        return "REC" + Year.now().getValue() + "-" + String.format("%06d", reconSeq);
+    }
+
+    /**
+     * 明细税率（0–100）× 行金额 → 税额；无税率时返回 0。
+     * 与门户「税率(%)」一致，作为头表税额主数据源（甄云类：以明细价税汇总为准）。
+     */
+    private static String trimToNull(String s) {
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    /**
+     * 税务发票代码/号码校验：专票必填；普票可空，若填则代码与号码成对出现。
+     */
+    private void validateVatInvoiceMetadata(InvoiceKind kind, String code, String number) {
+        if (kind == InvoiceKind.SPECIAL_VAT) {
+            if (code == null || number == null) {
+                throw new BadRequestException("增值税专用发票须同时填写税务发票代码与号码");
+            }
+        } else {
+            if ((code == null) != (number == null)) {
+                throw new BadRequestException("税务发票代码与号码须同时填写或同时留空");
+            }
+        }
+        if (code != null && !code.matches("\\d{10,12}")) {
+            throw new BadRequestException("税务发票代码须为10–12位数字");
+        }
+        if (number != null && !number.matches("\\d{8,20}")) {
+            throw new BadRequestException("税务发票号码须为8–20位数字");
+        }
+    }
+
+    private BigDecimal deriveTaxFromLines(List<InvoiceLineInput> lineInputs) {
+        BigDecimal tax = BigDecimal.ZERO;
+        for (InvoiceLineInput li : lineInputs) {
+            BigDecimal lineAmt = li.qty().multiply(li.unitPrice()).setScale(4, RoundingMode.HALF_UP);
+            if (li.taxRate() != null && li.taxRate().compareTo(BigDecimal.ZERO) > 0) {
+                tax = tax.add(lineAmt.multiply(li.taxRate())
+                        .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP));
+            }
+        }
+        return tax.setScale(2, RoundingMode.HALF_UP);
     }
 
     // --- Invoice CRUD ---
@@ -77,6 +139,7 @@ public class InvoiceService {
     @Transactional
     public Invoice createInvoice(Long supplierId, Long procurementOrgId, LocalDate invoiceDate,
                                   String currency, BigDecimal taxAmount, String remark,
+                                  InvoiceKind invoiceKind, String vatInvoiceCode, String vatInvoiceNumber,
                                   List<InvoiceLineInput> lineInputs) {
         Supplier supplier = masterDataService.requireSupplier(supplierId);
         OrgUnit org = orgUnitRepository.findById(procurementOrgId)
@@ -88,9 +151,13 @@ public class InvoiceService {
         inv.setProcurementOrg(org);
         inv.setInvoiceDate(invoiceDate);
         inv.setCurrency(currency != null ? currency : "CNY");
-        inv.setTaxAmount(taxAmount != null ? taxAmount : BigDecimal.ZERO);
         inv.setStatus(InvoiceStatus.SUBMITTED);
         inv.setRemark(remark);
+        InvoiceKind k = invoiceKind != null ? invoiceKind : InvoiceKind.ORDINARY_VAT;
+        inv.setInvoiceKind(k);
+        inv.setVatInvoiceCode(trimToNull(vatInvoiceCode));
+        inv.setVatInvoiceNumber(trimToNull(vatInvoiceNumber));
+        validateVatInvoiceMetadata(k, inv.getVatInvoiceCode(), inv.getVatInvoiceNumber());
 
         BigDecimal total = BigDecimal.ZERO;
         int n = 1;
@@ -125,6 +192,12 @@ public class InvoiceService {
         }
 
         inv.setTotalAmount(total);
+        BigDecimal derivedTax = deriveTaxFromLines(lineInputs);
+        if (derivedTax.compareTo(BigDecimal.ZERO) > 0) {
+            inv.setTaxAmount(derivedTax);
+        } else {
+            inv.setTaxAmount(taxAmount != null ? taxAmount : BigDecimal.ZERO);
+        }
         Invoice saved = invoiceRepository.save(inv);
         auditService.log(null, null, "CREATE_INVOICE", "INVOICE", saved.getId(),
                 "invoiceNo=" + saved.getInvoiceNo() + " amount=" + total, null);
@@ -210,19 +283,27 @@ public class InvoiceService {
         OrgUnit org = orgUnitRepository.findById(procurementOrgId)
                 .orElseThrow(() -> new NotFoundException("采购组织不存在"));
 
+        if (periodFrom != null && periodTo != null && periodFrom.isAfter(periodTo)) {
+            throw new BadRequestException("对账期间起不能晚于结束日期");
+        }
+
         BigDecimal poAmt = purchaseOrderRepository.sumAmountBySupplierAndOrgAndPeriod(
                 supplierId, procurementOrgId, periodFrom, periodTo);
         BigDecimal grAmt = goodsReceiptRepository.sumAmountBySupplierAndOrgAndPeriod(
                 supplierId, procurementOrgId, periodFrom, periodTo);
-        BigDecimal invAmt = invoiceRepository.sumAmountBySupplierAndOrgAndPeriod(
+        // 对账发票金额：仅已确认（采购已核票），与「可结算」口径一致
+        BigDecimal invAmt = invoiceRepository.sumConfirmedAmountBySupplierAndOrgAndPeriod(
                 supplierId, procurementOrgId, periodFrom, periodTo);
 
         if (poAmt == null) poAmt = BigDecimal.ZERO;
         if (grAmt == null) grAmt = BigDecimal.ZERO;
         if (invAmt == null) invAmt = BigDecimal.ZERO;
 
+        // 核心差异：收货（应付暂估依据）− 已确认开票；非 PO−票（PO 仅作三方参考）
+        BigDecimal diffGrVsInv = grAmt.subtract(invAmt);
+
         Reconciliation recon = new Reconciliation();
-        recon.setReconNo("REC" + Year.now().getValue() + "-" + String.format("%05d", System.currentTimeMillis() % 100000));
+        recon.setReconNo(nextReconNo());
         recon.setSupplier(supplier);
         recon.setProcurementOrg(org);
         recon.setPeriodFrom(periodFrom);
@@ -230,8 +311,8 @@ public class InvoiceService {
         recon.setPoAmount(poAmt);
         recon.setGrAmount(grAmt);
         recon.setInvoiceAmount(invAmt);
-        recon.setDiffAmount(poAmt.subtract(invAmt));
-        recon.setStatus(ReconStatus.DRAFT);
+        recon.setDiffAmount(diffGrVsInv);
+        recon.setStatus(ReconStatus.PENDING_SUPPLIER);
         recon.setRemark(remark);
 
         Reconciliation saved = reconciliationRepository.save(recon);
@@ -241,11 +322,194 @@ public class InvoiceService {
     }
 
     @Transactional
-    public Reconciliation confirmRecon(Long id) {
+    public Reconciliation confirmReconciliationBySupplier(Long reconId, Long supplierId) {
+        Reconciliation recon = reconciliationRepository.findById(reconId)
+                .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (!recon.getSupplier().getId().equals(supplierId)) {
+            throw new ForbiddenException("无权操作该对账单");
+        }
+        if (recon.getStatus() != ReconStatus.PENDING_SUPPLIER) {
+            throw new BadRequestException("当前状态不可由供应商确认");
+        }
+        recon.setStatus(ReconStatus.PENDING_PROCUREMENT);
+        recon.setSupplierConfirmedAt(Instant.now());
+        recon.setProcurementRejectReason(null);
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "SUPPLIER_CONFIRM_RECON", "RECONCILIATION", reconId,
+                "reconNo=" + recon.getReconNo(), null);
+        staffNotificationService.notifyProcurementOrgStakeholders(
+                recon.getProcurementOrg().getId(),
+                "供应商已确认对账单",
+                "对账单 " + recon.getReconNo() + " 已由供应商确认，请采购核对后完成确认。",
+                "RECON_SUPPLIER_CONFIRMED",
+                "RECONCILIATION",
+                saved.getId());
+        return saved;
+    }
+
+    @Transactional
+    public Reconciliation confirmReconciliationByProcurement(Long id) {
         Reconciliation recon = reconciliationRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (recon.getStatus() == ReconStatus.CONFIRMED) {
+            throw new BadRequestException("对账单已确认");
+        }
+        if (recon.getStatus() != ReconStatus.PENDING_PROCUREMENT) {
+            throw new BadRequestException("须待供应商确认后，采购方可确认");
+        }
         recon.setStatus(ReconStatus.CONFIRMED);
-        return reconciliationRepository.save(recon);
+        recon.setProcurementConfirmedAt(Instant.now());
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "CONFIRM_RECON", "RECONCILIATION", id,
+                "reconNo=" + recon.getReconNo(), null);
+        try {
+            notificationService.send(
+                    null,
+                    saved.getSupplier().getId(),
+                    "对账单已确认",
+                    "对账单 " + saved.getReconNo() + " 已由采购方确认。",
+                    "RECON_CONFIRMED",
+                    "RECONCILIATION",
+                    saved.getId());
+        } catch (Exception e) {
+            log.warn("对账确认后写入供应商通知失败: {}", e.getMessage());
+        }
+        return saved;
+    }
+
+    private static String requireReason(String reason, String label) {
+        if (reason == null || reason.isBlank()) {
+            throw new BadRequestException(label + "不能为空");
+        }
+        return reason.trim();
+    }
+
+    private void clearDisputeFields(Reconciliation recon) {
+        recon.setDisputeReason(null);
+        recon.setDisputedAt(null);
+        recon.setDisputedBy(null);
+    }
+
+    /** 供应商：待确认状态下提出异议 → 争议 */
+    @Transactional
+    public Reconciliation supplierDisputeReconciliation(Long reconId, Long supplierId, String reason) {
+        String r = requireReason(reason, "异议说明");
+        Reconciliation recon = reconciliationRepository.findById(reconId)
+                .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (!recon.getSupplier().getId().equals(supplierId)) {
+            throw new ForbiddenException("无权操作该对账单");
+        }
+        if (recon.getStatus() != ReconStatus.PENDING_SUPPLIER) {
+            throw new BadRequestException("当前状态不可提出异议");
+        }
+        recon.setStatus(ReconStatus.DISPUTED);
+        recon.setDisputeReason(r);
+        recon.setDisputedAt(Instant.now());
+        recon.setDisputedBy("SUPPLIER");
+        recon.setProcurementRejectReason(null);
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "SUPPLIER_DISPUTE_RECON", "RECONCILIATION", reconId,
+                "reconNo=" + recon.getReconNo(), null);
+        staffNotificationService.notifyProcurementOrgStakeholders(
+                recon.getProcurementOrg().getId(),
+                "供应商对对账单提出异议",
+                "对账单 " + recon.getReconNo() + " 异议说明：" + r,
+                "RECON_DISPUTED",
+                "RECONCILIATION",
+                saved.getId());
+        return saved;
+    }
+
+    /** 采购：待采购确认状态下驳回 → 退回供应商待确认 */
+    @Transactional
+    public Reconciliation procurementRejectReconciliation(Long id, String reason) {
+        String r = requireReason(reason, "驳回说明");
+        Reconciliation recon = reconciliationRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (recon.getStatus() != ReconStatus.PENDING_PROCUREMENT) {
+            throw new BadRequestException("仅「待采购确认」状态可驳回");
+        }
+        recon.setStatus(ReconStatus.PENDING_SUPPLIER);
+        recon.setSupplierConfirmedAt(null);
+        recon.setProcurementRejectReason(r);
+        clearDisputeFields(recon);
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "PROCUREMENT_REJECT_RECON", "RECONCILIATION", id,
+                "reconNo=" + recon.getReconNo(), null);
+        try {
+            notificationService.send(
+                    null,
+                    saved.getSupplier().getId(),
+                    "对账单已被采购驳回",
+                    "对账单 " + saved.getReconNo() + " 已被采购方驳回。说明：" + r,
+                    "RECON_REJECTED",
+                    "RECONCILIATION",
+                    saved.getId());
+        } catch (Exception e) {
+            log.warn("对账驳回后写入供应商通知失败: {}", e.getMessage());
+        }
+        return saved;
+    }
+
+    /** 采购：待采购确认状态下提出异议 → 争议 */
+    @Transactional
+    public Reconciliation procurementDisputeReconciliation(Long id, String reason) {
+        String r = requireReason(reason, "异议说明");
+        Reconciliation recon = reconciliationRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (recon.getStatus() != ReconStatus.PENDING_PROCUREMENT) {
+            throw new BadRequestException("仅「待采购确认」状态可提出异议");
+        }
+        recon.setStatus(ReconStatus.DISPUTED);
+        recon.setDisputeReason(r);
+        recon.setDisputedAt(Instant.now());
+        recon.setDisputedBy("PROCUREMENT");
+        recon.setProcurementRejectReason(null);
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "PROCUREMENT_DISPUTE_RECON", "RECONCILIATION", id,
+                "reconNo=" + recon.getReconNo(), null);
+        try {
+            notificationService.send(
+                    null,
+                    saved.getSupplier().getId(),
+                    "采购对对账单提出异议",
+                    "对账单 " + saved.getReconNo() + " 异议说明：" + r,
+                    "RECON_DISPUTED",
+                    "RECONCILIATION",
+                    saved.getId());
+        } catch (Exception e) {
+            log.warn("对账异议后写入供应商通知失败: {}", e.getMessage());
+        }
+        return saved;
+    }
+
+    /** 采购：争议状态下重新打开 → 退回供应商待确认 */
+    @Transactional
+    public Reconciliation procurementReopenFromDispute(Long id) {
+        Reconciliation recon = reconciliationRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("对账单不存在"));
+        if (recon.getStatus() != ReconStatus.DISPUTED) {
+            throw new BadRequestException("仅「争议」状态可重新打开");
+        }
+        recon.setStatus(ReconStatus.PENDING_SUPPLIER);
+        recon.setSupplierConfirmedAt(null);
+        clearDisputeFields(recon);
+        Reconciliation saved = reconciliationRepository.save(recon);
+        auditService.log(null, null, "RECON_REOPEN", "RECONCILIATION", id,
+                "reconNo=" + recon.getReconNo(), null);
+        try {
+            notificationService.send(
+                    null,
+                    saved.getSupplier().getId(),
+                    "对账单已重新打开",
+                    "对账单 " + saved.getReconNo() + " 已由采购方重新打开，请核对后再次确认。",
+                    "RECON_REOPENED",
+                    "RECONCILIATION",
+                    saved.getId());
+        } catch (Exception e) {
+            log.warn("对账重新打开后写入供应商通知失败: {}", e.getMessage());
+        }
+        return saved;
     }
 
     /**

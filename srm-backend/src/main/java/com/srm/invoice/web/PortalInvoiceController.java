@@ -2,6 +2,8 @@ package com.srm.invoice.web;
 
 import com.srm.foundation.web.AuthController;
 import com.srm.invoice.domain.Invoice;
+import com.srm.invoice.domain.InvoiceKind;
+import com.srm.web.error.BadRequestException;
 import com.srm.invoice.service.InvoiceService;
 import com.srm.invoice.service.InvoiceService.InvoiceLineInput;
 import com.srm.web.error.ForbiddenException;
@@ -59,8 +61,22 @@ public class PortalInvoiceController {
                 .toList();
         Invoice inv = invoiceService.createInvoice(
                 sid, req.procurementOrgId(), req.invoiceDate(),
-                req.currency(), req.taxAmount(), req.remark(), lines);
+                req.currency(), req.taxAmount(), req.remark(),
+                parseInvoiceKind(req.invoiceKind()),
+                req.vatInvoiceCode(), req.vatInvoiceNumber(),
+                lines);
         return InvoiceController.InvoiceDetail.from(invoiceService.requireDetail(inv.getId()));
+    }
+
+    private static InvoiceKind parseInvoiceKind(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return InvoiceKind.ORDINARY_VAT;
+        }
+        return switch (raw.trim()) {
+            case "ORDINARY_VAT" -> InvoiceKind.ORDINARY_VAT;
+            case "SPECIAL_VAT" -> InvoiceKind.SPECIAL_VAT;
+            default -> throw new BadRequestException("发票类型须为 ORDINARY_VAT（普票）或 SPECIAL_VAT（专票）");
+        };
     }
 
     public record PortalInvoiceCreateReq(
@@ -69,6 +85,9 @@ public class PortalInvoiceController {
             String currency,
             BigDecimal taxAmount,
             String remark,
+            String invoiceKind,
+            String vatInvoiceCode,
+            String vatInvoiceNumber,
             @NotEmpty List<InvoiceController.InvLineReq> lines
     ) {}
 }

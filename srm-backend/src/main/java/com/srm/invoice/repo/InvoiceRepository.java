@@ -33,6 +33,16 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
                                                    @Param("from") LocalDate from,
                                                    @Param("to") LocalDate to);
 
+    /** 对账汇总：仅统计采购已确认发票（甄云类 SRM 常以「确认后」金额进入对账/结算口径） */
+    @Query("select coalesce(sum(i.totalAmount),0) from Invoice i " +
+            "where i.supplier.id = :sid and i.procurementOrg.id = :oid " +
+            "and i.invoiceDate >= :from and i.invoiceDate <= :to " +
+            "and i.status = com.srm.invoice.domain.InvoiceStatus.CONFIRMED")
+    BigDecimal sumConfirmedAmountBySupplierAndOrgAndPeriod(@Param("sid") Long supplierId,
+                                                            @Param("oid") Long orgId,
+                                                            @Param("from") LocalDate from,
+                                                            @Param("to") LocalDate to);
+
     long countByProcurementOrgIdAndStatus(Long procurementOrgId, InvoiceStatus status);
 
     /** 已提交/已确认发票中，关联同一订单行的累计开票数量（三单匹配用） */

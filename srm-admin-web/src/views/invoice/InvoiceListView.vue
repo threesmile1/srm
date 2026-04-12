@@ -17,6 +17,11 @@ const statusMap: Record<string, string> = {
   SUBMITTED: '已提交', CONFIRMED: '已确认', REJECTED: '已退回', CANCELLED: '已取消',
 }
 
+const kindMap: Record<string, string> = {
+  ORDINARY_VAT: '普票',
+  SPECIAL_VAT: '专票',
+}
+
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
   if (!ledgers.data.length) return
@@ -60,6 +65,9 @@ async function reject(id: number) {
         <DataTableEmpty />
       </template>
       <el-table-column prop="invoiceNo" label="发票号" width="180" />
+      <el-table-column label="票种" width="72">
+        <template #default="{ row }">{{ kindMap[row.invoiceKind] || row.invoiceKind }}</template>
+      </el-table-column>
       <el-table-column prop="supplierCode" label="供应商" width="120" />
       <el-table-column prop="supplierName" label="供应商名称" width="160" />
       <el-table-column prop="invoiceDate" label="开票日期" width="110" />

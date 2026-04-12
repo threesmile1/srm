@@ -97,6 +97,14 @@ function logout() {
               <el-icon><Money /></el-icon>
               发票
             </router-link>
+            <router-link
+              to="/reconciliation"
+              class="zy-tab"
+              :class="{ 'is-active': route.path.startsWith('/reconciliation') }"
+            >
+              <el-icon><Document /></el-icon>
+              对账
+            </router-link>
             <router-link to="/contracts" class="zy-tab" :class="{ 'is-active': route.path.startsWith('/contracts') }">
               <el-icon><Tickets /></el-icon>
               合同

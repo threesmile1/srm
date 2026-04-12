@@ -2,15 +2,18 @@ package com.srm.invoice.web;
 
 import com.srm.invoice.domain.*;
 import com.srm.invoice.service.InvoiceService;
+import com.srm.web.error.BadRequestException;
 import com.srm.invoice.service.InvoiceService.InvoiceLineInput;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -52,7 +55,10 @@ public class InvoiceController {
                 .toList();
         Invoice inv = invoiceService.createInvoice(
                 req.supplierId(), req.procurementOrgId(), req.invoiceDate(),
-                req.currency(), req.taxAmount(), req.remark(), lines);
+                req.currency(), req.taxAmount(), req.remark(),
+                parseInvoiceKind(req.invoiceKind()),
+                req.vatInvoiceCode(), req.vatInvoiceNumber(),
+                lines);
         return InvoiceDetail.from(invoiceService.requireDetail(inv.getId()));
     }
 
@@ -95,7 +101,24 @@ public class InvoiceController {
 
     @PostMapping("/reconciliations/{id}/confirm")
     public ReconSummary confirmRecon(@PathVariable Long id) {
-        return ReconSummary.from(invoiceService.confirmRecon(id));
+        return ReconSummary.from(invoiceService.confirmReconciliationByProcurement(id));
+    }
+
+    @PostMapping("/reconciliations/{id}/procurement-reject")
+    public ReconSummary procurementRejectRecon(@PathVariable Long id,
+                                                  @Valid @RequestBody ReconReasonRequest req) {
+        return ReconSummary.from(invoiceService.procurementRejectReconciliation(id, req.reason()));
+    }
+
+    @PostMapping("/reconciliations/{id}/procurement-dispute")
+    public ReconSummary procurementDisputeRecon(@PathVariable Long id,
+                                                   @Valid @RequestBody ReconReasonRequest req) {
+        return ReconSummary.from(invoiceService.procurementDisputeReconciliation(id, req.reason()));
+    }
+
+    @PostMapping("/reconciliations/{id}/reopen")
+    public ReconSummary reopenRecon(@PathVariable Long id) {
+        return ReconSummary.from(invoiceService.procurementReopenFromDispute(id));
     }
 
     // --- DTOs ---
@@ -107,6 +130,10 @@ public class InvoiceController {
             String currency,
             BigDecimal taxAmount,
             String remark,
+            /** ORDINARY_VAT | SPECIAL_VAT */
+            String invoiceKind,
+            String vatInvoiceCode,
+            String vatInvoiceNumber,
             @NotEmpty List<InvLineReq> lines
     ) {}
 
@@ -119,6 +146,8 @@ public class InvoiceController {
 
     public record RejectRequest(String reason) {}
 
+    public record ReconReasonRequest(@NotBlank String reason) {}
+
     public record ReconCreateRequest(
             @NotNull Long supplierId,
             @NotNull Long procurementOrgId,
@@ -130,13 +159,16 @@ public class InvoiceController {
     public record InvoiceSummary(
             Long id, String invoiceNo, Long supplierId, String supplierCode, String supplierName,
             LocalDate invoiceDate, BigDecimal totalAmount, BigDecimal taxAmount,
-            String currency, String status
+            String currency, String status,
+            String invoiceKind, String vatInvoiceCode, String vatInvoiceNumber
     ) {
         static InvoiceSummary from(Invoice i) {
             return new InvoiceSummary(i.getId(), i.getInvoiceNo(),
                     i.getSupplier().getId(), i.getSupplier().getCode(), i.getSupplier().getName(),
                     i.getInvoiceDate(), i.getTotalAmount(), i.getTaxAmount(),
-                    i.getCurrency(), i.getStatus().name());
+                    i.getCurrency(), i.getStatus().name(),
+                    i.getInvoiceKind().name(),
+                    i.getVatInvoiceCode(), i.getVatInvoiceNumber());
         }
     }
 
@@ -145,6 +177,7 @@ public class InvoiceController {
             Long procurementOrgId, String procurementOrgCode,
             LocalDate invoiceDate, BigDecimal totalAmount, BigDecimal taxAmount,
             String currency, String status, String remark,
+            String invoiceKind, String vatInvoiceCode, String vatInvoiceNumber,
             List<InvLineResponse> lines
     ) {
         static InvoiceDetail from(Invoice i) {
@@ -153,6 +186,8 @@ public class InvoiceController {
                     i.getProcurementOrg().getId(), i.getProcurementOrg().getCode(),
                     i.getInvoiceDate(), i.getTotalAmount(), i.getTaxAmount(),
                     i.getCurrency(), i.getStatus().name(), i.getRemark(),
+                    i.getInvoiceKind().name(),
+                    i.getVatInvoiceCode(), i.getVatInvoiceNumber(),
                     i.getLines().stream().map(InvLineResponse::from).toList());
         }
     }
@@ -172,18 +207,47 @@ public class InvoiceController {
         }
     }
 
+    /**
+     * @param diffAmount     收货 − 已确认发票（核心对账差异，甄云类：暂估/收货应付 vs 票）
+     * @param diffPoGrAmount 订单 − 收货（到货执行差异，三方参考）
+     */
+    private static final BigDecimal RECON_VARIANCE_UI = new BigDecimal("0.01");
+
+    private static InvoiceKind parseInvoiceKind(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return InvoiceKind.ORDINARY_VAT;
+        }
+        return switch (raw.trim()) {
+            case "ORDINARY_VAT" -> InvoiceKind.ORDINARY_VAT;
+            case "SPECIAL_VAT" -> InvoiceKind.SPECIAL_VAT;
+            default -> throw new BadRequestException("发票类型须为 ORDINARY_VAT（普票）或 SPECIAL_VAT（专票）");
+        };
+    }
+
     public record ReconSummary(
             Long id, String reconNo, Long supplierId, String supplierCode, String supplierName,
             LocalDate periodFrom, LocalDate periodTo,
             BigDecimal poAmount, BigDecimal grAmount, BigDecimal invoiceAmount,
-            BigDecimal diffAmount, String status
+            BigDecimal diffAmount, BigDecimal diffPoGrAmount, String status,
+            Instant supplierConfirmedAt, Instant procurementConfirmedAt,
+            boolean varianceAlert,
+            String disputeReason, Instant disputedAt, String disputedBy,
+            String procurementRejectReason
     ) {
         static ReconSummary from(Reconciliation r) {
+            BigDecimal po = r.getPoAmount() != null ? r.getPoAmount() : BigDecimal.ZERO;
+            BigDecimal gr = r.getGrAmount() != null ? r.getGrAmount() : BigDecimal.ZERO;
+            BigDecimal diffPoGr = po.subtract(gr);
+            BigDecimal d = r.getDiffAmount() != null ? r.getDiffAmount() : BigDecimal.ZERO;
+            boolean alert = d.abs().compareTo(RECON_VARIANCE_UI) > 0;
             return new ReconSummary(r.getId(), r.getReconNo(),
                     r.getSupplier().getId(), r.getSupplier().getCode(), r.getSupplier().getName(),
                     r.getPeriodFrom(), r.getPeriodTo(),
                     r.getPoAmount(), r.getGrAmount(), r.getInvoiceAmount(),
-                    r.getDiffAmount(), r.getStatus().name());
+                    r.getDiffAmount(), diffPoGr, r.getStatus().name(),
+                    r.getSupplierConfirmedAt(), r.getProcurementConfirmedAt(), alert,
+                    r.getDisputeReason(), r.getDisputedAt(), r.getDisputedBy(),
+                    r.getProcurementRejectReason());
         }
     }
 }

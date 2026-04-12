@@ -11,6 +11,11 @@ const statusMap: Record<string, string> = {
   SUBMITTED: '已提交', CONFIRMED: '已确认', REJECTED: '已退回', CANCELLED: '已取消',
 }
 
+const kindMap: Record<string, string> = {
+  ORDINARY_VAT: '增值税普通发票',
+  SPECIAL_VAT: '增值税专用发票',
+}
+
 async function load() {
   detail.value = (await invoiceApi.get(Number(route.params.id))).data
 }
@@ -47,8 +52,14 @@ async function reject() {
       <el-descriptions-item label="采购组织">{{ detail.procurementOrgCode }}</el-descriptions-item>
       <el-descriptions-item label="币种">{{ detail.currency }}</el-descriptions-item>
       <el-descriptions-item label="开票日期">{{ detail.invoiceDate }}</el-descriptions-item>
+      <el-descriptions-item label="票种">{{ kindMap[detail.invoiceKind] || detail.invoiceKind }}</el-descriptions-item>
+      <el-descriptions-item label="税务发票代码">{{ detail.vatInvoiceCode || '—' }}</el-descriptions-item>
+      <el-descriptions-item label="税务发票号码">{{ detail.vatInvoiceNumber || '—' }}</el-descriptions-item>
       <el-descriptions-item label="总金额">{{ detail.totalAmount }}</el-descriptions-item>
-      <el-descriptions-item label="税额">{{ detail.taxAmount }}</el-descriptions-item>
+      <el-descriptions-item label="税额">
+        {{ detail.taxAmount }}
+        <span class="sub">（明细填写税率时由行金额×税率%汇总）</span>
+      </el-descriptions-item>
       <el-descriptions-item label="备注" :span="3">{{ detail.remark }}</el-descriptions-item>
     </el-descriptions>
     <el-table :data="detail.lines" border size="small">
@@ -68,4 +79,5 @@ async function reject() {
 .page { padding: 16px; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .title { font-size: 18px; font-weight: 600; }
+.sub { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); font-weight: normal; }
 </style>

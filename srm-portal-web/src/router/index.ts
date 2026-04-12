@@ -8,6 +8,7 @@ import PortalAsnListView from '../views/PortalAsnListView.vue'
 import PortalAsnCreateView from '../views/PortalAsnCreateView.vue'
 import PortalInvoiceListView from '../views/PortalInvoiceListView.vue'
 import PortalInvoiceCreateView from '../views/PortalInvoiceCreateView.vue'
+import PortalReconListView from '../views/PortalReconListView.vue'
 import PortalRfqListView from '../views/PortalRfqListView.vue'
 import PortalRfqDetailView from '../views/PortalRfqDetailView.vue'
 import PortalNotificationsView from '../views/PortalNotificationsView.vue'
@@ -33,6 +34,7 @@ const router = createRouter({
         { path: 'rfq/:id', name: 'portal-rfq-detail', component: PortalRfqDetailView },
         { path: 'invoices', name: 'portal-invoice-list', component: PortalInvoiceListView },
         { path: 'invoices/new', name: 'portal-invoice-new', component: PortalInvoiceCreateView },
+        { path: 'reconciliation', name: 'portal-recon-list', component: PortalReconListView },
         { path: 'notifications', name: 'portal-notifications', component: PortalNotificationsView },
         { path: 'perf', name: 'portal-perf-list', component: PortalPerfListView },
         { path: 'perf/:id', name: 'portal-perf-detail', component: PortalPerfDetailView },
@@ -69,6 +71,7 @@ router.afterEach((to) => {
   else if (to.path === '/perf') title = '绩效考核'
   else if (to.path.startsWith('/perf/')) title = '考核详情'
   else if (to.path === '/contracts') title = '我的合同'
+  else if (to.path === '/reconciliation') title = '对账'
   else if (to.path === '/quality') title = '质量协同'
   document.title = `${title} · 百得胜`
 })
