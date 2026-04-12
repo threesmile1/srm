@@ -10,7 +10,9 @@ package com.srm.invoice.domain;
 public enum ReconStatus {
     /** 待供应商确认（通常为采购侧生成对账单后） */
     PENDING_SUPPLIER,
-    /** 待采购确认（供应商已确认采购单，或供应商发起对账后待采购核对） */
+    /**
+     * 待采购确认对账单：供方已确认对账单（非 PO 行回执语义），或供应商发起对账后待采购核对。
+     */
     PENDING_PROCUREMENT,
     /** 双方已确认 */
     CONFIRMED,

@@ -204,17 +204,18 @@ public class GoodsReceiptService {
             if (in.receivedQty().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new BadRequestException("收货数量须大于 0");
             }
+            if (in.asnLineId() == null) {
+                throw new BadRequestException("行 " + pol.getLineNo() + " 收货必须关联 ASN 发货通知");
+            }
             BigDecimal maxRecv = pol.getQty().multiply(ratio).setScale(4, RoundingMode.HALF_UP)
                     .subtract(pol.getReceivedQty());
             if (in.receivedQty().compareTo(maxRecv) > 0) {
                 throw new BadRequestException("行 " + pol.getLineNo() + " 超过可收上限（含超收比例）: " + maxRecv);
             }
-            if (in.asnLineId() != null) {
-                AsnLine al = asnLineRepository.findById(in.asnLineId())
-                        .orElseThrow(() -> new NotFoundException("ASN 行不存在: " + in.asnLineId()));
-                if (!al.getPurchaseOrderLine().getId().equals(pol.getId())) {
-                    throw new BadRequestException("ASN 行与订单行不匹配");
-                }
+            AsnLine al = asnLineRepository.findById(in.asnLineId())
+                    .orElseThrow(() -> new NotFoundException("ASN 行不存在: " + in.asnLineId()));
+            if (!al.getPurchaseOrderLine().getId().equals(pol.getId())) {
+                throw new BadRequestException("ASN 行与订单行不匹配");
             }
         }
 
@@ -235,9 +236,8 @@ public class GoodsReceiptService {
             GoodsReceiptLine gl = new GoodsReceiptLine();
             gl.setGoodsReceipt(gr);
             gl.setPurchaseOrderLine(pol);
-            if (in.asnLineId() != null) {
-                gl.setAsnLine(asnLineRepository.findById(in.asnLineId()).orElse(null));
-            }
+            gl.setAsnLine(asnLineRepository.findById(in.asnLineId())
+                    .orElseThrow(() -> new NotFoundException("ASN 行不存在: " + in.asnLineId())));
             gl.setLineNo(n++);
             gl.setReceivedQty(in.receivedQty());
             gr.getLines().add(gl);

@@ -220,18 +220,39 @@ async function reopenRecon(id: number) {
       <el-table-column prop="supplierName" label="供应商名称" width="160" />
       <el-table-column prop="periodFrom" label="开始日期" width="110" />
       <el-table-column prop="periodTo" label="结束日期" width="110" />
-      <el-table-column prop="poAmount" label="PO金额" width="110" />
-      <el-table-column prop="grAmount" label="收货金额" width="110" />
+      <el-table-column prop="poAmount" label="PO金额" width="110">
+        <template #header>
+          <span>PO金额</span>
+          <el-tooltip content="对账按收货月：与收货金额同为期间内入库执行额（收货行×订单单价）" placement="top">
+            <span class="hint">?</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
+      <el-table-column prop="grAmount" label="收货金额" width="110">
+        <template #header>
+          <span>收货金额</span>
+          <el-tooltip content="收货单日期落在对账期间内的金额" placement="top">
+            <span class="hint">?</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column prop="invoiceAmount" label="已确认票额" width="120">
         <template #header>
           <span>已确认票额</span>
-          <el-tooltip content="对账期间内、采购已确认的发票金额（未确认提交不计入）" placement="top">
+          <el-tooltip content="采购已确认的发票行中，所关联收货单的收货日期落在本期间内的行金额（无收货关联的行不计入）" placement="top">
             <span class="hint">?</span>
           </el-tooltip>
         </template>
       </el-table-column>
       <el-table-column prop="diffAmount" label="收货−票" width="110" />
-      <el-table-column prop="diffPoGrAmount" label="订单−收货" width="110" />
+      <el-table-column prop="diffPoGrAmount" label="订单−收货" width="110">
+        <template #header>
+          <span>订单−收货</span>
+          <el-tooltip content="对账按收货月时 PO 与收货同口径，本列通常为 0" placement="top">
+            <span class="hint">?</span>
+          </el-tooltip>
+        </template>
+      </el-table-column>
       <el-table-column label="差异" width="72">
         <template #default="{ row }">
           <el-tag v-if="row.varianceAlert" type="warning" size="small">有差异</el-tag>
@@ -283,7 +304,7 @@ async function reopenRecon(id: number) {
     </el-dialog>
 
     <el-dialog v-model="createOpen" title="新建对账（采购代建）" width="560px" destroy-on-close>
-      <p class="dialog-hint">选择供应商与对账期间，系统将汇总该期间 PO/收货/已确认发票金额；对账单为「待供应商确认」状态。</p>
+      <p class="dialog-hint">对账按<strong>收货月</strong>汇总；发票统计为已确认且所关联收货日期落在期间内的发票行。对账单为「待供应商确认」状态。</p>
       <el-form label-width="100px">
         <el-form-item label="供应商" required>
           <el-select v-model="createForm.supplierId" filterable style="width: 100%" placeholder="选择供应商">

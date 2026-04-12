@@ -149,7 +149,7 @@ async function submitDispute() {
       <span class="title">对账</span>
       <el-button type="primary" @click="openCreate">发起对账</el-button>
       <span class="sub">
-        甄云类流程：通常由<strong>供应商在月末发起对账</strong>，采购核对；采购也可在管理端生成对账单，则您需对采购出具的账单做「确认」或「异议」。
+        对账按<strong>收货月</strong>汇总；甄云类流程通常由供应商在月末发起，采购核对；采购也可在管理端生成对账单，则您需对采购出具的账单做「确认」或「异议」。
       </span>
     </div>
     <el-table :data="rows" stripe>
@@ -202,7 +202,7 @@ async function submitDispute() {
     </el-table>
 
     <el-dialog v-model="createOpen" title="发起对账" width="520px" destroy-on-close>
-      <p class="dialog-hint">按甄云类财务协同：选择采购组织与对账期间，系统将汇总该期间 PO/收货/已确认发票金额供采购核对。</p>
+      <p class="dialog-hint">对账按<strong>收货月</strong>：期间内收货金额、以及采购已确认且关联收货单落在该期间的发票行金额；订单列与收货同口径。请选择采购组织与对账期间。</p>
       <el-form label-width="100px">
         <el-form-item label="采购组织" required>
           <el-select v-model="createForm.procurementOrgId" style="width: 100%">

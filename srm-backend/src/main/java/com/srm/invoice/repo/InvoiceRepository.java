@@ -50,6 +50,22 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
                                                             @Param("from") LocalDate from,
                                                             @Param("to") LocalDate to);
 
+    /**
+     * 对账按<strong>收货月</strong>：仅统计已确认发票中、关联 {@link com.srm.execution.domain.GoodsReceipt}
+     * 且收货日期落在区间内的<strong>发票行金额</strong>（无收货关联的行不计入）。
+     */
+    @Query("""
+            select coalesce(sum(il.amount), 0) from InvoiceLine il
+            join il.invoice i
+            join il.goodsReceipt gr
+            where i.supplier.id = :sid and i.procurementOrg.id = :oid
+            and i.status = com.srm.invoice.domain.InvoiceStatus.CONFIRMED
+            and gr.receiptDate >= :from and gr.receiptDate <= :to""")
+    BigDecimal sumConfirmedLineAmountByGrReceiptDateInPeriod(@Param("sid") Long supplierId,
+                                                             @Param("oid") Long orgId,
+                                                             @Param("from") LocalDate from,
+                                                             @Param("to") LocalDate to);
+
     long countByProcurementOrgIdAndStatus(Long procurementOrgId, InvoiceStatus status);
 
     /** 已提交/已确认发票中，关联同一订单行的累计开票数量（三单匹配用） */

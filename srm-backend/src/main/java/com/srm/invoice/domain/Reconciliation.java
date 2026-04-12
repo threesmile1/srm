@@ -33,12 +33,19 @@ public class Reconciliation extends BaseEntity {
     @Column(name = "period_to")
     private LocalDate periodTo;
 
+    /**
+     * 对账按收货月时，与 {@link #grAmount} 同为期间内按收货行×订单行单价汇总（入库执行额）。
+     */
     @Column(name = "po_amount", precision = 19, scale = 4)
     private BigDecimal poAmount = BigDecimal.ZERO;
 
+    /** 对账期间内（收货单 {@code receipt_date}）的收货计价金额 */
     @Column(name = "gr_amount", precision = 19, scale = 4)
     private BigDecimal grAmount = BigDecimal.ZERO;
 
+    /**
+     * 已确认发票中、发票行关联之收货单的收货日期落在对账期间内的行金额合计。
+     */
     @Column(name = "invoice_amount", precision = 19, scale = 4)
     private BigDecimal invoiceAmount = BigDecimal.ZERO;
 

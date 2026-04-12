@@ -97,6 +97,9 @@ async function submit() {
       <h2 class="title">新建发货通知</h2>
       <router-link to="/asn">返回列表</router-link>
     </div>
+    <p class="rule-hint">
+      请先在各订单行完成「确认交期与数量」（回执），再创建发货通知；未回执的行将无法发货。
+    </p>
     <el-form label-width="100px" style="margin-top: 16px; max-width: 640px">
       <el-form-item label="采购订单">
         <el-select v-model="purchaseOrderId" placeholder="选择已发布订单" filterable style="width: 100%">
@@ -153,5 +156,12 @@ async function submit() {
   font-size: 18px;
   font-weight: 600;
   margin: 0;
+}
+.rule-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+  max-width: 720px;
 }
 </style>

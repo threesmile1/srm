@@ -149,6 +149,11 @@ async function submit() {
       ElMessage.warning('请至少一行填写大于 0 的收货数量')
       return
     }
+    const missingAsn = lines.filter((x) => x.asnLineId == null)
+    if (missingAsn.length) {
+      ElMessage.warning('每行收货须关联 ASN：请先在门户确认订单行，并由供应商提交发货通知后再收货')
+      return
+    }
     const r = await executionApi.createGoodsReceipt({
       procurementOrgId: procurementOrgId.value,
       purchaseOrderId: purchaseOrderId.value,
@@ -199,8 +204,9 @@ async function submit() {
       </el-form-item>
     </el-form>
 
-    <p v-if="poDetail && polToAsnLineId.size > 0" class="asn-hint">
-      已根据发货通知自动匹配 ASN 行；提交后收货单将出现在「已发货通知待收货」页签（订单仍有未收清时）。
+    <p v-if="poDetail" class="asn-hint">
+      规则：须先由供应商在门户<strong>确认订单行</strong>并提交<strong>发货通知（ASN）</strong>，本页按通知自动匹配 ASN 行；<strong>无 ASN 的行不可收货</strong>。
+      <template v-if="polToAsnLineId.size > 0">已匹配行可提交；订单仍有未收清时收货单会出现在「待收货」相关入口。</template>
     </p>
 
     <el-table v-if="poDetail" :data="poDetail.lines" stripe style="margin-top: 8px; max-width: 900px">

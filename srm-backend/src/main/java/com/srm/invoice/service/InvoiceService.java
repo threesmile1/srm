@@ -465,6 +465,10 @@ public class InvoiceService {
     }
 
     /**
+     * 对账汇总口径：<strong>仅按收货月</strong>（收货单 {@code receipt_date} 落在期间内）。
+     * PO 金额列与收货金额同为「按收货行×订单行单价」汇总，二者一致；发票金额为已确认发票中、
+     * 关联收货单且该收货单收货日期在期间内的发票<strong>行</strong>金额合计。
+     *
      * @param supplierInitiated true：甄云类「月末供应商在 SRM 发起对账」→ 生成后直接进入待采购确认；
      *                          false：采购侧生成对账单 → 待供应商确认
      */
@@ -476,23 +480,25 @@ public class InvoiceService {
         OrgUnit org = orgUnitRepository.findById(procurementOrgId)
                 .orElseThrow(() -> new NotFoundException("采购组织不存在"));
 
-        if (periodFrom != null && periodTo != null && periodFrom.isAfter(periodTo)) {
+        if (periodFrom == null || periodTo == null) {
+            throw new BadRequestException("请指定对账期间起止");
+        }
+        if (periodFrom.isAfter(periodTo)) {
             throw new BadRequestException("对账期间起不能晚于结束日期");
         }
 
-        BigDecimal poAmt = purchaseOrderRepository.sumAmountBySupplierAndOrgAndPeriod(
-                supplierId, procurementOrgId, periodFrom, periodTo);
         BigDecimal grAmt = goodsReceiptRepository.sumAmountBySupplierAndOrgAndPeriod(
                 supplierId, procurementOrgId, periodFrom, periodTo);
-        // 对账发票金额：仅已确认（采购已核票），与「可结算」口径一致
-        BigDecimal invAmt = invoiceRepository.sumConfirmedAmountBySupplierAndOrgAndPeriod(
+        // 收货月口径下，订单侧展示金额与收货计价一致（均为入库执行额）
+        BigDecimal poAmt = grAmt;
+        BigDecimal invAmt = invoiceRepository.sumConfirmedLineAmountByGrReceiptDateInPeriod(
                 supplierId, procurementOrgId, periodFrom, periodTo);
 
         if (poAmt == null) poAmt = BigDecimal.ZERO;
         if (grAmt == null) grAmt = BigDecimal.ZERO;
         if (invAmt == null) invAmt = BigDecimal.ZERO;
 
-        // 核心差异：收货（应付暂估依据）− 已确认开票；非 PO−票（PO 仅作三方参考）
+        // 核心差异：收货（应付暂估）− 已确认且关联收货落在期间内的开票
         BigDecimal diffGrVsInv = grAmt.subtract(invAmt);
 
         Reconciliation recon = new Reconciliation();

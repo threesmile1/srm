@@ -117,6 +117,10 @@ public class AsnService {
             if (pol == null) {
                 throw new BadRequestException("订单行不属于该订单: " + in.purchaseOrderLineId());
             }
+            if (pol.getConfirmedAt() == null) {
+                throw new BadRequestException(
+                        "行 " + pol.getLineNo() + " 尚未回执，请在门户先确认交期与数量后再创建发货通知");
+            }
             if (in.shipQty().compareTo(BigDecimal.ZERO) <= 0) {
                 throw new BadRequestException("发货数量须大于 0");
             }
