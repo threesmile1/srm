@@ -24,6 +24,7 @@ import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
 import com.srm.po.repo.PurchaseOrderLineRepository;
 import com.srm.po.repo.PurchaseOrderRepository;
+import com.srm.invoice.web.InvoiceController;
 import com.srm.web.error.BadRequestException;
 import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
@@ -298,7 +299,7 @@ public class InvoiceService {
     }
 
     @Transactional
-    public Invoice createInvoice(Long supplierId, Long procurementOrgId, LocalDate invoiceDate,
+    public InvoiceController.InvoiceDetail createInvoice(Long supplierId, Long procurementOrgId, LocalDate invoiceDate,
                                   String currency, BigDecimal taxAmount, String remark,
                                   InvoiceKind invoiceKind, String vatInvoiceCode, String vatInvoiceNumber,
                                   List<InvoiceLineInput> lineInputs) {
@@ -370,11 +371,26 @@ public class InvoiceService {
                 "INVOICE_SUBMITTED",
                 "INVOICE",
                 saved.getId());
-        return saved;
+        return InvoiceController.InvoiceDetail.from(requireDetail(saved.getId()));
+    }
+
+    /** OSIV=false 时须在 Service 事务内组装 DTO，避免懒加载；勿依赖 Controller 上 @Transactional */
+    @Transactional(readOnly = true)
+    public InvoiceController.InvoiceDetail getInvoiceDetailDto(Long id) {
+        return InvoiceController.InvoiceDetail.from(requireDetail(id));
+    }
+
+    @Transactional(readOnly = true)
+    public InvoiceController.InvoiceDetail getPortalInvoiceDetailDto(Long id, long supplierId) {
+        Invoice inv = requireDetail(id);
+        if (!inv.getSupplier().getId().equals(supplierId)) {
+            throw new ForbiddenException("无权查看此发票");
+        }
+        return InvoiceController.InvoiceDetail.from(inv);
     }
 
     @Transactional
-    public Invoice confirmInvoice(Long id) {
+    public InvoiceController.InvoiceDetail confirmInvoice(Long id) {
         Invoice inv = requireDetail(id);
         if (inv.getStatus() != InvoiceStatus.SUBMITTED) {
             throw new BadRequestException("仅已提交的发票可确认");
@@ -395,11 +411,11 @@ public class InvoiceService {
         } catch (Exception e) {
             log.warn("发票确认后写入供应商通知失败: {}", e.getMessage());
         }
-        return saved;
+        return InvoiceController.InvoiceDetail.from(requireDetail(id));
     }
 
     @Transactional
-    public Invoice rejectInvoice(Long id, String reason) {
+    public InvoiceController.InvoiceDetail rejectInvoice(Long id, String reason) {
         Invoice inv = requireDetail(id);
         if (inv.getStatus() != InvoiceStatus.SUBMITTED) {
             throw new BadRequestException("仅已提交的发票可退回");
@@ -421,7 +437,7 @@ public class InvoiceService {
         } catch (Exception e) {
             log.warn("发票退回后写入供应商通知失败: {}", e.getMessage());
         }
-        return saved;
+        return InvoiceController.InvoiceDetail.from(requireDetail(id));
     }
 
     // --- Reconciliation ---

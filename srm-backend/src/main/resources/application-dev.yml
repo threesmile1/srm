@@ -4,3 +4,7 @@
 spring:
   application:
     name: srm-backend
+
+srm:
+  api:
+    include-stack-trace: true

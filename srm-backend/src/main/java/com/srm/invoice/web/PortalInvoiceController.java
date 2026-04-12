@@ -1,7 +1,6 @@
 package com.srm.invoice.web;
 
 import com.srm.foundation.web.AuthController;
-import com.srm.invoice.domain.Invoice;
 import com.srm.invoice.domain.InvoiceKind;
 import com.srm.web.error.BadRequestException;
 import com.srm.invoice.service.InvoiceService;
@@ -13,7 +12,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -56,20 +54,13 @@ public class PortalInvoiceController {
                 .toList();
     }
 
-    /** OSIV 关闭时，须在事务内完成 DTO 映射，避免 InvoiceDetail.from 触发懒加载异常 */
     @GetMapping("/{id}")
-    @Transactional(readOnly = true)
     public InvoiceController.InvoiceDetail get(@PathVariable Long id, HttpSession session) {
         Long sid = requireSupplierId(session);
-        Invoice inv = invoiceService.requireDetail(id);
-        if (!inv.getSupplier().getId().equals(sid)) {
-            throw new ForbiddenException("无权查看此发票");
-        }
-        return InvoiceController.InvoiceDetail.from(inv);
+        return invoiceService.getPortalInvoiceDetailDto(id, sid);
     }
 
     @PostMapping
-    @Transactional
     public InvoiceController.InvoiceDetail create(@Valid @RequestBody PortalInvoiceCreateReq req,
                                                     HttpSession session) {
         Long sid = requireSupplierId(session);
@@ -78,13 +69,12 @@ public class PortalInvoiceController {
                         l.qty(), l.unitPrice(), l.taxRate(),
                         l.purchaseOrderId(), l.purchaseOrderLineId(), l.goodsReceiptId()))
                 .toList();
-        Invoice inv = invoiceService.createInvoice(
+        return invoiceService.createInvoice(
                 sid, req.procurementOrgId(), req.invoiceDate(),
                 req.currency(), req.taxAmount(), req.remark(),
                 parseInvoiceKind(req.invoiceKind()),
                 req.vatInvoiceCode(), req.vatInvoiceNumber(),
                 lines);
-        return InvoiceController.InvoiceDetail.from(invoiceService.requireDetail(inv.getId()));
     }
 
     /** 提交发票成功后上传 PDF/图片等扫描件（单文件 ≤10MB，可多次上传） */

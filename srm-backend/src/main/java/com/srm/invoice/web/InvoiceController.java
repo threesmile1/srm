@@ -13,7 +13,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -63,41 +62,34 @@ public class InvoiceController {
     }
 
     @GetMapping("/invoices/{id}")
-    @Transactional(readOnly = true)
     public InvoiceDetail getInvoice(@PathVariable Long id) {
-        return InvoiceDetail.from(invoiceService.requireDetail(id));
+        return invoiceService.getInvoiceDetailDto(id);
     }
 
     @PostMapping("/invoices")
-    @Transactional
     public InvoiceDetail createInvoice(@Valid @RequestBody InvoiceCreateRequest req) {
         List<InvoiceLineInput> lines = req.lines().stream()
                 .map(l -> new InvoiceLineInput(l.materialCode(), l.materialName(),
                         l.qty(), l.unitPrice(), l.taxRate(),
                         l.purchaseOrderId(), l.purchaseOrderLineId(), l.goodsReceiptId()))
                 .toList();
-        Invoice inv = invoiceService.createInvoice(
+        return invoiceService.createInvoice(
                 req.supplierId(), req.procurementOrgId(), req.invoiceDate(),
                 req.currency(), req.taxAmount(), req.remark(),
                 parseInvoiceKind(req.invoiceKind()),
                 req.vatInvoiceCode(), req.vatInvoiceNumber(),
                 lines);
-        return InvoiceDetail.from(invoiceService.requireDetail(inv.getId()));
     }
 
     @PostMapping("/invoices/{id}/confirm")
-    @Transactional
     public InvoiceDetail confirmInvoice(@PathVariable Long id) {
-        invoiceService.confirmInvoice(id);
-        return InvoiceDetail.from(invoiceService.requireDetail(id));
+        return invoiceService.confirmInvoice(id);
     }
 
     @PostMapping("/invoices/{id}/reject")
-    @Transactional
     public InvoiceDetail rejectInvoice(@PathVariable Long id,
                                         @RequestBody(required = false) RejectRequest req) {
-        invoiceService.rejectInvoice(id, req != null ? req.reason() : null);
-        return InvoiceDetail.from(invoiceService.requireDetail(id));
+        return invoiceService.rejectInvoice(id, req != null ? req.reason() : null);
     }
 
     /** 采购端下载供应商上传的发票附件 */
@@ -232,7 +224,7 @@ public class InvoiceController {
             List<InvLineResponse> lines,
             List<InvoiceAttachmentItem> attachments
     ) {
-        static InvoiceDetail from(Invoice i) {
+        public static InvoiceDetail from(Invoice i) {
             List<InvoiceAttachmentItem> atts = i.getAttachments() == null ? List.of()
                     : i.getAttachments().stream()
                     .map(a -> new InvoiceAttachmentItem(a.getId(), a.getOriginalName(),

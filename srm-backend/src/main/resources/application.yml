@@ -39,6 +39,9 @@ springdoc:
 # 业务时区：JVM 默认 + 合同到期定时任务 cron 解读（见 BusinessTimezoneApplicationListener、ContractExpiryNotificationScheduler）
 srm:
   business-timezone: Asia/Shanghai
+  # 未捕获异常时返回 JSON（浏览器 Network 可见），栈信息见 include-stack-trace（生产务必 false）
+  api:
+    include-stack-trace: false
   # 供应商门户上传的发票附件（PDF/图片）本地目录
   invoice-upload-dir: ${user.home}/.srm/invoice-files
   over-receive-ratio: 0.05

@@ -23,8 +23,12 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findBySupplierIdAndStatusOrderByIdDesc(Long supplierId, InvoiceStatus status);
 
+    /**
+     * 不可与 {@code attachments} 同图一并 fetch：Hibernate 禁止同一查询同时 join 两个 List（Bag），会报 MultipleBagFetchException。
+     * 附件在事务内对 {@code Invoice.attachments} 懒加载即可。
+     */
     @EntityGraph(attributePaths = {"lines", "lines.purchaseOrder", "lines.purchaseOrderLine",
-            "lines.goodsReceipt", "supplier", "procurementOrg", "attachments"})
+            "lines.goodsReceipt", "supplier", "procurementOrg"})
     Optional<Invoice> findWithDetailsById(Long id);
 
     @Query("select coalesce(sum(i.totalAmount),0) from Invoice i " +
