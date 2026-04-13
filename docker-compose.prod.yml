@@ -1,0 +1,55 @@
+# 生产编排：仅将 HTTP / MySQL 映射到本机回环，由宿主机 Nginx 反代到 127.0.0.1:18081。
+# 用法：cp .env.example .env && 编辑密码
+#   docker compose -f docker-compose.prod.yml up -d
+#   或旧版：docker-compose -p srm -f docker-compose.prod.yml up -d
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: srm-mysql
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: srm
+      MYSQL_USER: srm
+      MYSQL_PASSWORD: ${SRM_DB_PASSWORD:?set SRM_DB_PASSWORD in .env}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      # 局域网 Navicat：宿主机 IP:13306；请配合防火墙仅允许内网（见 DEPLOY）。勿对公网暴露。
+      - "0.0.0.0:13306:3306"
+    volumes:
+      - srm-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  srm-backend:
+    build:
+      context: ./srm-backend
+      dockerfile: Dockerfile
+    image: srm-backend:prod
+    container_name: srm-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/srm?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: srm
+      SPRING_DATASOURCE_PASSWORD: ${SRM_DB_PASSWORD:?set SRM_DB_PASSWORD in .env}
+      SRM_INVOICE_UPLOAD_DIR: /data/invoice-files
+    ports:
+      - "127.0.0.1:18081:8080"
+    volumes:
+      - srm-invoice-files:/data/invoice-files
+
+volumes:
+  srm-mysql-data:
+  srm-invoice-files:

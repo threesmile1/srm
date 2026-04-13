@@ -26,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -180,59 +181,76 @@ public class PurchaseRequisitionService {
 
     /**
      * Convert approved PR lines to Purchase Orders.
-     * Groups selected lines by supplier; each group becomes one PO.
+     * 供应商、单价、约定交期由采购在转单时填写；按所选供应商分组，每组生成一张 PO。
+     * 约定交期未填时默认使用请购行上的需求交期。
      */
     @Transactional
-    public List<PurchaseOrder> convertToPo(Long prId, List<Long> lineIds) {
+    public List<PurchaseOrder> convertToPo(Long prId, List<ConvertPrLineCmd> commands) {
         PurchaseRequisition pr = requireDetail(prId);
         if (pr.getStatus() != PrStatus.APPROVED && pr.getStatus() != PrStatus.PARTIALLY_CONVERTED) {
             throw new BadRequestException("仅已批准或部分转单的请购单可转PO，当前状态: " + pr.getStatus());
         }
 
-        List<PurchaseRequisitionLine> selectedLines = pr.getLines().stream()
-                .filter(l -> lineIds.contains(l.getId()))
-                .toList();
+        if (commands == null || commands.isEmpty()) {
+            throw new BadRequestException("请提供转单行及采购信息");
+        }
+        long distinctLineIds = commands.stream().map(ConvertPrLineCmd::lineId).distinct().count();
+        if (distinctLineIds != commands.size()) {
+            throw new BadRequestException("转单行不能重复");
+        }
 
-        if (selectedLines.isEmpty()) throw new BadRequestException("请选择要转单的行");
+        Map<Long, PurchaseRequisitionLine> lineById = pr.getLines().stream()
+                .collect(Collectors.toMap(PurchaseRequisitionLine::getId, l -> l, (a, b) -> a, LinkedHashMap::new));
 
-        for (PurchaseRequisitionLine l : selectedLines) {
+        for (ConvertPrLineCmd cmd : commands) {
+            PurchaseRequisitionLine l = lineById.get(cmd.lineId());
+            if (l == null) {
+                throw new BadRequestException("请购单不包含行 id: " + cmd.lineId());
+            }
             if (l.getConvertedPo() != null) {
                 throw new BadRequestException("行 " + l.getLineNo() + " 已转单");
             }
-            if (l.getSupplier() == null) {
-                throw new BadRequestException("行 " + l.getLineNo() + " 未指定供应商");
+            if (cmd.supplierId() == null) {
+                throw new BadRequestException("行 " + l.getLineNo() + " 请选择供应商");
             }
-            if (l.getWarehouse() == null) {
-                throw new BadRequestException("行 " + l.getLineNo() + " 未指定仓库");
+            if (cmd.unitPrice() == null || cmd.unitPrice().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BadRequestException("行 " + l.getLineNo() + " 请填写有效采购单价");
             }
-            if (l.getUnitPrice() == null || l.getUnitPrice().compareTo(BigDecimal.ZERO) <= 0) {
-                throw new BadRequestException("行 " + l.getLineNo() + " 未设定单价");
-            }
+            Supplier supplier = masterDataService.requireSupplier(cmd.supplierId());
+            masterDataService.assertSupplierAuthorizedForOrg(supplier, pr.getProcurementOrg());
+            masterDataService.assertSupplierAllowedForPurchaseOrder(supplier);
         }
 
-        Map<Long, List<PurchaseRequisitionLine>> bySupplier = selectedLines.stream()
-                .collect(Collectors.groupingBy(l -> l.getSupplier().getId(), LinkedHashMap::new, Collectors.toList()));
+        Map<Long, List<ConvertPrLineCmd>> bySupplier = commands.stream()
+                .collect(Collectors.groupingBy(ConvertPrLineCmd::supplierId, LinkedHashMap::new, Collectors.toList()));
 
         List<PurchaseOrder> createdPos = new ArrayList<>();
         for (var entry : bySupplier.entrySet()) {
             Long supplierId = entry.getKey();
-            List<PurchaseRequisitionLine> group = entry.getValue();
-            List<CreateLine> poLines = group.stream()
-                    .map(l -> new CreateLine(
-                            l.getMaterial().getId(),
-                            l.getWarehouse().getId(),
-                            l.getQty(),
-                            l.getUom(),
-                            l.getUnitPrice(),
-                            l.getRequestedDate()))
-                    .toList();
+            List<ConvertPrLineCmd> groupCmds = entry.getValue();
+            List<CreateLine> poLines = new ArrayList<>();
+            for (ConvertPrLineCmd cmd : groupCmds) {
+                PurchaseRequisitionLine l = lineById.get(cmd.lineId());
+                java.time.LocalDate poDate = cmd.requestedDate() != null ? cmd.requestedDate() : l.getRequestedDate();
+                Warehouse wh = l.getWarehouse() != null ? l.getWarehouse() : resolveWarehouseOrNull(pr.getProcurementOrg(), l.getMaterial());
+                if (wh == null) {
+                    throw new BadRequestException("行 " + l.getLineNo() + " 未指定仓库（可不填），但系统也无法从物料默认仓解析；请维护物料四厂仓/仓库主档，或在请购行选择仓库");
+                }
+                poLines.add(new CreateLine(
+                        l.getMaterial().getId(),
+                        wh.getId(),
+                        l.getQty(),
+                        l.getUom(),
+                        cmd.unitPrice(),
+                        poDate));
+            }
 
             PurchaseOrder po = purchaseOrderService.create(
                     pr.getProcurementOrg().getId(), supplierId,
                     "CNY", "由请购单 " + pr.getPrNo() + " 转换", poLines);
 
-            for (PurchaseRequisitionLine l : group) {
-                l.setConvertedPo(po);
+            for (ConvertPrLineCmd cmd : groupCmds) {
+                lineById.get(cmd.lineId()).setConvertedPo(po);
             }
             createdPos.add(po);
         }
@@ -246,6 +264,13 @@ public class PurchaseRequisitionService {
         return createdPos;
     }
 
+    public record ConvertPrLineCmd(
+            Long lineId,
+            Long supplierId,
+            BigDecimal unitPrice,
+            java.time.LocalDate requestedDate
+    ) {}
+
     public record CreatePrLine(
             Long materialId,
             Long warehouseId,
@@ -256,4 +281,26 @@ public class PurchaseRequisitionService {
             java.time.LocalDate requestedDate,
             String remark
     ) {}
+
+    /**
+     * PR 转 PO 时仓库允许为空；若为空，则尝试按「采购组织维度」从物料四厂默认仓编码解析本地 warehouse 主档。
+     * 解析失败返回 null，由调用方决定是否报错或补录。
+     */
+    private Warehouse resolveWarehouseOrNull(OrgUnit procurementOrg, MaterialItem material) {
+        if (procurementOrg == null || material == null) {
+            return null;
+        }
+        String orgName = procurementOrg.getName() != null ? procurementOrg.getName().trim() : "";
+        String code = switch (orgName) {
+            case "苏州工厂" -> material.getU9WarehouseSuzhou();
+            case "成都工厂" -> material.getU9WarehouseChengdu();
+            case "华南工厂" -> material.getU9WarehouseHuanan();
+            case "水漆工厂" -> material.getU9WarehouseShuiqi();
+            default -> null;
+        };
+        if (code == null || !StringUtils.hasText(code)) {
+            return null;
+        }
+        return warehouseRepository.findByProcurementOrgAndCode(procurementOrg, code.trim()).orElse(null);
+    }
 }

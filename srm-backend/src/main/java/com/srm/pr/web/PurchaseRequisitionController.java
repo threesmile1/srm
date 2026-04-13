@@ -5,11 +5,13 @@ import com.srm.pr.domain.PrStatus;
 import com.srm.pr.domain.PurchaseRequisition;
 import com.srm.pr.domain.PurchaseRequisitionLine;
 import com.srm.pr.service.PurchaseRequisitionService;
+import com.srm.pr.service.PurchaseRequisitionService.ConvertPrLineCmd;
 import com.srm.pr.service.PurchaseRequisitionService.CreatePrLine;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -73,7 +75,10 @@ public class PurchaseRequisitionController {
 
     @PostMapping("/{id}/convert-to-po")
     public List<ConvertResult> convertToPo(@PathVariable Long id, @Valid @RequestBody ConvertRequest req) {
-        List<PurchaseOrder> pos = prService.convertToPo(id, req.lineIds());
+        List<ConvertPrLineCmd> cmds = req.lines().stream()
+                .map(l -> new ConvertPrLineCmd(l.lineId(), l.supplierId(), l.unitPrice(), l.requestedDate()))
+                .toList();
+        List<PurchaseOrder> pos = prService.convertToPo(id, cmds);
         return pos.stream().map(po -> new ConvertResult(po.getId(), po.getPoNo())).toList();
     }
 
@@ -100,7 +105,14 @@ public class PurchaseRequisitionController {
 
     public record RejectRequest(String reason) {}
 
-    public record ConvertRequest(@NotEmpty List<Long> lineIds) {}
+    public record ConvertRequest(@NotEmpty List<@Valid ConvertLineRequest> lines) {}
+
+    public record ConvertLineRequest(
+            @NotNull Long lineId,
+            @NotNull Long supplierId,
+            @NotNull @Positive BigDecimal unitPrice,
+            LocalDate requestedDate
+    ) {}
 
     public record ConvertResult(Long poId, String poNo) {}
 

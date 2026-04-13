@@ -16,6 +16,7 @@ const {
   materialLoading,
   remoteSearch: remoteSearchMaterials,
   prefetchInitial: prefetchMaterials,
+  getMaterial,
 } = useMaterialRemoteSelect()
 
 const procurementOrgId = ref<number | null>(null)
@@ -119,8 +120,8 @@ onMounted(async () => {
       </el-form-item>
     </el-form>
 
-    <el-table :data="lines" border style="max-width: 900px">
-      <el-table-column label="物料" width="200">
+    <el-table :data="lines" border style="max-width: 1200px">
+      <el-table-column label="物料" width="400">
         <template #default="{ row }">
           <el-select
             v-model="row.materialId"
@@ -134,6 +135,16 @@ onMounted(async () => {
           >
             <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.code} ${m.name}`" :value="m.id" />
           </el-select>
+        </template>
+      </el-table-column>
+      <el-table-column label="规格" width="140" show-overflow-tooltip>
+        <template #default="{ row }">
+          {{ getMaterial(row.materialId)?.specification?.trim() || '—' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="单位" width="88">
+        <template #default="{ row }">
+          {{ getMaterial(row.materialId)?.uom?.trim() || '—' }}
         </template>
       </el-table-column>
       <el-table-column label="仓库" width="160">

@@ -226,6 +226,13 @@ async function save() {
         <el-input v-model="form.remark" type="textarea" :rows="2" />
       </el-form-item>
     </el-form>
+    <el-alert
+      type="info"
+      show-icon
+      :closable="false"
+      style="margin-bottom: 12px; max-width: 960px"
+      title="参考单价、建议供应商仅供内部与采购参考；正式供应商与价格在「转采购订单」时由采购确认。"
+    />
     <div style="display: flex; justify-content: space-between; margin: 16px 0 8px">
       <span style="font-weight: 600">请购行明细</span>
       <el-button size="small" @click="addLine">添加行</el-button>
@@ -249,6 +256,11 @@ async function save() {
           </el-select>
         </template>
       </el-table-column>
+      <el-table-column label="规格" min-width="120" show-overflow-tooltip>
+        <template #default="{ row }">
+          {{ getMaterial(row.materialId)?.specification?.trim() || '—' }}
+        </template>
+      </el-table-column>
       <el-table-column label="数量" width="100">
         <template #default="{ row }"><el-input-number v-model="row.qty" :min="1" size="small" controls-position="right" /></template>
       </el-table-column>
@@ -258,7 +270,7 @@ async function save() {
       <el-table-column label="参考单价" width="110">
         <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" size="small" controls-position="right" /></template>
       </el-table-column>
-      <el-table-column label="供应商" min-width="160">
+      <el-table-column label="建议供应商" min-width="160">
         <template #default="{ row }">
           <el-select v-model="row.supplierId" filterable clearable placeholder="可选" style="width: 100%">
             <el-option v-for="s in suppliers" :key="s.id" :label="`${s.code} ${s.name}`" :value="s.id" />
@@ -272,7 +284,7 @@ async function save() {
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="交期" width="140">
+      <el-table-column label="需求交期" width="140">
         <template #default="{ row }"><el-date-picker v-model="row.requestedDate" type="date" value-format="YYYY-MM-DD" size="small" style="width: 100%" /></template>
       </el-table-column>
       <el-table-column label="" width="50">

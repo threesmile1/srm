@@ -7,6 +7,7 @@
 | 路径 | 说明 |
 |------|------|
 | [docs/SRM建设方案.md](./docs/SRM建设方案.md) | 业务与架构方案 |
+| [docs/DEPLOY.md](./docs/DEPLOY.md) | **生产/服务器部署说明**（库、JAR、前端构建、Nginx 示例） |
 | [docs/开发计划.md](./docs/开发计划.md) | 阶段与 Sprint 参考 |
 | [srm-backend](./srm-backend/) | Java / Spring Boot 3 后端 |
 | [srm-admin-web](./srm-admin-web/) | Vue 3 + TS 管理端（**5173**） |

@@ -4,12 +4,29 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { prApi, type PrDetail, type PrLine } from '../../api/pr'
 import { approvalApi, type ApprovalInstance } from '../../api/approval'
+import { masterApi, type Supplier } from '../../api/master'
 
 const route = useRoute()
 const router = useRouter()
 const pr = ref<PrDetail | null>(null)
 const selectedLineIds = ref<number[]>([])
 const approvalInst = ref<ApprovalInstance | null | undefined>(undefined)
+const suppliers = ref<Supplier[]>([])
+const convertDialogVisible = ref(false)
+
+/** 转 PO 弹窗：采购填写供应商、单价、约定交期 */
+type ConvertDraftRow = {
+  lineId: number
+  lineNo: number
+  materialCode: string
+  materialName: string
+  refUnitPrice: string | null
+  prRequestedDate: string | null
+  supplierId: number | null
+  unitPrice: number | undefined
+  promisedDate: string | null
+}
+const convertDraft = ref<ConvertDraftRow[]>([])
 
 const workflowPending = computed(
   () => pr.value?.status === 'PENDING_APPROVAL' && approvalInst.value?.status === 'PENDING',
@@ -31,6 +48,10 @@ const canCancel = computed(() =>
 async function load() {
   const id = Number(route.params.id)
   pr.value = (await prApi.get(id)).data
+  if (!suppliers.value.length) {
+    const s = await masterApi.listSuppliers()
+    suppliers.value = s.data
+  }
   if (pr.value?.status === 'PENDING_APPROVAL') {
     try {
       const ar = await approvalApi.getByDoc('PR', id)
@@ -75,7 +96,7 @@ function onSelectionChange(selection: PrLine[]) {
   selectedLineIds.value = selection.map((l) => l.id)
 }
 
-async function convertToPo() {
+function openConvertDialog() {
   const convertable = selectedLineIds.value.filter((id) => {
     const line = pr.value!.lines.find((l) => l.id === id)
     return line && !line.convertedPoId
@@ -84,9 +105,51 @@ async function convertToPo() {
     ElMessage.warning('请选择未转单的行')
     return
   }
+  convertDraft.value = convertable.map((id) => {
+    const line = pr.value!.lines.find((l) => l.id === id)!
+    const refPx = line.unitPrice != null && line.unitPrice !== '' ? Number(line.unitPrice) : undefined
+    return {
+      lineId: line.id,
+      lineNo: line.lineNo,
+      materialCode: line.materialCode,
+      materialName: line.materialName,
+      refUnitPrice: line.unitPrice,
+      prRequestedDate: line.requestedDate,
+      supplierId: line.supplierId ?? null,
+      unitPrice: refPx !== undefined && !Number.isNaN(refPx) ? refPx : undefined,
+      promisedDate: line.requestedDate ?? null,
+    }
+  })
+  convertDialogVisible.value = true
+}
+
+function onConvertDialogClosed() {
+  convertDraft.value = []
+}
+
+async function confirmConvertToPo() {
+  for (const row of convertDraft.value) {
+    if (row.supplierId == null) {
+      ElMessage.warning(`第 ${row.lineNo} 行请选择供应商`)
+      return
+    }
+    if (row.unitPrice == null || row.unitPrice <= 0) {
+      ElMessage.warning(`第 ${row.lineNo} 行请填写有效采购单价`)
+      return
+    }
+  }
   try {
-    const r = await prApi.convertToPo(pr.value!.id, convertable)
+    const r = await prApi.convertToPo(
+      pr.value!.id,
+      convertDraft.value.map((row) => ({
+        lineId: row.lineId,
+        supplierId: row.supplierId!,
+        unitPrice: row.unitPrice!,
+        requestedDate: row.promisedDate || undefined,
+      })),
+    )
     ElMessage.success(`已创建 ${r.data.length} 个采购订单`)
+    convertDialogVisible.value = false
     await load()
   } catch (e: unknown) {
     const msg = e && typeof e === 'object' && 'response' in e
@@ -111,7 +174,7 @@ async function convertToPo() {
       <el-button v-if="workflowPending" type="primary" link @click="router.push('/approval/list')">
         前往审批中心
       </el-button>
-      <el-button v-if="canConvert" type="warning" @click="convertToPo">选中行转PO</el-button>
+      <el-button v-if="canConvert" type="warning" @click="openConvertDialog">转采购订单…</el-button>
       <el-button v-if="canCancel" @click="cancel">取消</el-button>
     </div>
     <el-alert
@@ -135,9 +198,9 @@ async function convertToPo() {
       <el-table-column prop="materialName" label="物料名称" min-width="140" />
       <el-table-column prop="qty" label="数量" width="90" />
       <el-table-column prop="uom" label="单位" width="70" />
-      <el-table-column prop="unitPrice" label="单价" width="90" />
-      <el-table-column prop="requestedDate" label="交期" width="110" />
-      <el-table-column prop="supplierCode" label="供应商" width="110" />
+      <el-table-column prop="unitPrice" label="参考单价" width="100" />
+      <el-table-column prop="requestedDate" label="需求交期" width="110" />
+      <el-table-column prop="supplierCode" label="建议供应商" width="120" />
       <el-table-column prop="warehouseCode" label="仓库" width="100" />
       <el-table-column label="已转PO" width="160">
         <template #default="{ row }">
@@ -149,6 +212,54 @@ async function convertToPo() {
         </template>
       </el-table-column>
     </el-table>
+
+    <el-dialog
+      v-model="convertDialogVisible"
+      title="转采购订单（请确认供应商、单价与约定交期）"
+      width="920px"
+      destroy-on-close
+      @closed="onConvertDialogClosed"
+    >
+      <el-alert
+        type="info"
+        show-icon
+        :closable="false"
+        style="margin-bottom: 12px"
+        title="请购侧数据为参考；正式商务条件以本页填写的供应商、采购单价及约定交期为准。未填约定交期时将采用请购行上的需求交期。"
+      />
+      <el-table :data="convertDraft" border size="small">
+        <el-table-column prop="lineNo" label="#" width="44" />
+        <el-table-column prop="materialCode" label="物料编码" width="110" />
+        <el-table-column prop="materialName" label="物料名称" min-width="120" show-overflow-tooltip />
+        <el-table-column label="参考单价" width="100">
+          <template #default="{ row }">{{ row.refUnitPrice ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="需求交期" width="108">
+          <template #default="{ row }">{{ row.prRequestedDate ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="供应商" min-width="180">
+          <template #default="{ row }">
+            <el-select v-model="row.supplierId" filterable placeholder="必选" style="width: 100%">
+              <el-option v-for="s in suppliers" :key="s.id" :label="`${s.code} ${s.name}`" :value="s.id" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="采购单价" width="130">
+          <template #default="{ row }">
+            <el-input-number v-model="row.unitPrice" :min="0.0001" :precision="4" :step="0.01" controls-position="right" style="width: 100%" />
+          </template>
+        </el-table-column>
+        <el-table-column label="约定交期" width="150">
+          <template #default="{ row }">
+            <el-date-picker v-model="row.promisedDate" type="date" value-format="YYYY-MM-DD" placeholder="默认=需求交期" style="width: 100%" clearable />
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="convertDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmConvertToPo">生成采购订单</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

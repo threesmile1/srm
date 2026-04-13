@@ -59,6 +59,9 @@ export const prApi = {
   reject: (id: number, reason?: string) =>
     api.post<PrDetail>(`/api/v1/purchase-requisitions/${id}/reject`, { reason }),
   cancel: (id: number) => api.post<PrDetail>(`/api/v1/purchase-requisitions/${id}/cancel`),
-  convertToPo: (id: number, lineIds: number[]) =>
-    api.post<{ poId: number; poNo: string }[]>(`/api/v1/purchase-requisitions/${id}/convert-to-po`, { lineIds }),
+  /** 转 PO：由采购填写每行供应商、采购单价、约定交期（未填则后端用请购交期） */
+  convertToPo: (
+    id: number,
+    lines: { lineId: number; supplierId: number; unitPrice: number; requestedDate?: string | null }[],
+  ) => api.post<{ poId: number; poNo: string }[]>(`/api/v1/purchase-requisitions/${id}/convert-to-po`, { lines }),
 }

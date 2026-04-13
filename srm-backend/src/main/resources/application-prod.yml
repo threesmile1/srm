@@ -1,0 +1,15 @@
+# 生产：随 spring.profiles.active=prod 合并；勿使用 dev（无 DevDataBootstrap / DevFlywayRepairConfig）。
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn
+
+srm:
+  api:
+    include-stack-trace: false
