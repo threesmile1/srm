@@ -68,7 +68,7 @@ public class PortalPurchaseOrderController {
     }
 
     @Transactional(readOnly = true)
-    @GetMapping("/purchase-orders/{id}")
+    @GetMapping("/purchase-orders/{id:\\d+}")
     public PurchaseOrderController.PoDetailResponse getDetail(
             @PathVariable Long id,
             HttpSession session,
