@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Bell, Document, Van, SwitchButton, User, Money, WarningFilled, Sell, Tickets, Medal, Warning,
+  Bell, Document, Van, SwitchButton, User, Money, WarningFilled, Sell, Tickets, Medal, Warning, ArrowDown,
 } from '@element-plus/icons-vue'
 import { usePortalAuthStore } from '../stores/portalAuth'
 import { portalApi, type PortalTodoSummary } from '../api/portal'
@@ -66,6 +66,16 @@ function logout() {
   auth.logout()
   router.push('/login')
 }
+
+const moreActive = ref(false)
+watch(
+  () => route.path,
+  (p) => {
+    moreActive.value =
+      p.startsWith('/reconciliation') || p.startsWith('/contracts') || p.startsWith('/perf') || p.startsWith('/quality')
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -97,26 +107,32 @@ function logout() {
               <el-icon><Money /></el-icon>
               发票
             </router-link>
-            <router-link
-              to="/reconciliation"
-              class="zy-tab"
-              :class="{ 'is-active': route.path.startsWith('/reconciliation') }"
-            >
-              <el-icon><Document /></el-icon>
-              对账
-            </router-link>
-            <router-link to="/contracts" class="zy-tab" :class="{ 'is-active': route.path.startsWith('/contracts') }">
-              <el-icon><Tickets /></el-icon>
-              合同
-            </router-link>
-            <router-link to="/perf" class="zy-tab" :class="{ 'is-active': route.path.startsWith('/perf') }">
-              <el-icon><Medal /></el-icon>
-              绩效
-            </router-link>
-            <router-link to="/quality" class="zy-tab" :class="{ 'is-active': route.path.startsWith('/quality') }">
-              <el-icon><Warning /></el-icon>
-              质量
-            </router-link>
+            <el-dropdown trigger="click" placement="bottom-start">
+              <span class="zy-tab zy-tab--more" :class="{ 'is-active': moreActive }">
+                更多
+                <el-icon class="zy-more-ic"><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="router.push('/reconciliation')">
+                    <el-icon><Document /></el-icon>
+                    对账
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="router.push('/contracts')">
+                    <el-icon><Tickets /></el-icon>
+                    合同
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="router.push('/perf')">
+                    <el-icon><Medal /></el-icon>
+                    绩效
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="router.push('/quality')">
+                    <el-icon><Warning /></el-icon>
+                    质量
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <router-link
               to="/notifications"
               class="zy-tab"
@@ -349,6 +365,16 @@ function logout() {
   color: var(--zy-tab-active, #1677ff);
   font-weight: 500;
   border-bottom-color: var(--zy-tab-active, #1677ff);
+}
+
+.zy-tab--more {
+  cursor: pointer;
+  user-select: none;
+}
+
+.zy-more-ic {
+  margin-left: 2px;
+  font-size: 12px;
 }
 
 .zy-topbar-right {
