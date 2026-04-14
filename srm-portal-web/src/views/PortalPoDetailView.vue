@@ -8,8 +8,10 @@ const route = useRoute()
 const router = useRouter()
 const po = ref<PoDetail | null>(null)
 const dialog = ref(false)
+const batchDialog = ref(false)
 const currentLine = ref<PoLine | null>(null)
 const form = ref({ confirmedQty: 0, promisedDate: '', remark: '' })
+const batchForm = ref({ promisedDate: '' })
 
 async function load() {
   const id = Number(route.params.id)
@@ -44,6 +46,44 @@ async function saveConfirm() {
   }
 }
 
+function openBatchConfirm() {
+  batchForm.value = { promisedDate: '' }
+  batchDialog.value = true
+}
+
+async function saveBatchConfirm() {
+  if (!po.value) return
+  if (!batchForm.value.promisedDate) {
+    ElMessage.error('请填写承诺交期')
+    return
+  }
+  const lines = po.value.lines.filter((l) => !l.confirmedAt)
+  if (lines.length === 0) {
+    ElMessage.info('没有需要确认的行')
+    batchDialog.value = false
+    return
+  }
+
+  let ok = 0
+  let fail = 0
+  for (const line of lines) {
+    try {
+      await portalApi.confirmLine(line.id, {
+        confirmedQty: Number(line.qty),
+        promisedDate: batchForm.value.promisedDate,
+      })
+      ok++
+    } catch {
+      fail++
+    }
+  }
+  if (fail === 0) ElMessage.success(`批量确认成功：${ok} 条`)
+  else ElMessage.warning(`批量确认完成：成功 ${ok} 条，失败 ${fail} 条`)
+
+  batchDialog.value = false
+  await load()
+}
+
 onMounted(load)
 </script>
 
@@ -61,8 +101,9 @@ onMounted(load)
       <el-descriptions-item v-if="po.exportStatus" label="U9导出">{{ po.exportStatus }}</el-descriptions-item>
     </el-descriptions>
 
-    <div v-if="po.status === 'RELEASED'" style="margin-top: 12px">
+    <div v-if="po.status === 'RELEASED'" style="margin-top: 12px; display: flex; align-items: center; gap: 16px">
       <router-link :to="{ path: '/asn/new', query: { poId: String(po.id) } }">新建发货通知 (ASN)</router-link>
+      <el-button type="primary" @click="openBatchConfirm">确认</el-button>
     </div>
 
     <el-table :data="po.lines" stripe style="margin-top: 16px">
@@ -99,6 +140,23 @@ onMounted(load)
       <template #footer>
         <el-button @click="dialog = false">取消</el-button>
         <el-button type="primary" @click="saveConfirm">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="batchDialog" title="批量确认" width="420px">
+      <el-form label-width="100px">
+        <el-form-item label="承诺交期">
+          <el-date-picker v-model="batchForm.promisedDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item>
+          <div style="color: var(--el-text-color-secondary); font-size: 12px">
+            将对所有未确认行自动按订购量确认，并批量填写相同的承诺交期。
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveBatchConfirm">提交</el-button>
       </template>
     </el-dialog>
   </div>
