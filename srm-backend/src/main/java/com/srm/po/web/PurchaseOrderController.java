@@ -24,6 +24,7 @@ import org.springframework.data.domain.Page;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 @Tag(name = "PurchaseOrder", description = "A3 采购订单")
@@ -163,12 +164,14 @@ public class PurchaseOrderController {
             String exportStatus
     ) {
         static PoSummaryResponse from(PurchaseOrder po) {
+            String businessDate = po.getU9BusinessDate() != null ? po.getU9BusinessDate().toString()
+                    : (po.getReleasedAt() != null ? po.getReleasedAt().atZone(ZoneId.systemDefault()).toLocalDate().toString() : null);
             return new PoSummaryResponse(
                     po.getId(),
                     po.getPoNo(),
                     po.getU9DocNo(),
                     po.getU9OfficialOrderNo(),
-                    po.getU9BusinessDate() != null ? po.getU9BusinessDate().toString() : null,
+                    businessDate,
                     po.getReleasedAt() != null ? po.getReleasedAt().toString() : null,
                     po.getStatus().name(),
                     po.getSupplier().getCode(),
