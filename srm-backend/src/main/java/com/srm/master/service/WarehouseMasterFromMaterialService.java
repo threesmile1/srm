@@ -63,6 +63,7 @@ public class WarehouseMasterFromMaterialService {
         upsertOne(m.getU9WarehouseChengdu(), "chengdu", "成都工厂", nameCache);
         upsertOne(m.getU9WarehouseHuanan(), "huanan", "华南工厂", nameCache);
         upsertOne(m.getU9WarehouseShuiqi(), "shuiqi", "水漆工厂", nameCache);
+        upsertOne(m.getU9WarehouseNingbo(), "ningbo", "宁波公司", nameCache);
     }
 
     private void upsertOne(
@@ -114,6 +115,7 @@ public class WarehouseMasterFromMaterialService {
             case "chengdu" -> "成都工厂";
             case "huanan" -> "华南工厂";
             case "shuiqi" -> "水漆工厂";
+            case "ningbo" -> "宁波公司";
             default -> factoryKey;
         };
     }
@@ -125,6 +127,7 @@ public class WarehouseMasterFromMaterialService {
             case "chengdu" -> nullToEmpty(u9.getFactoryWarehouseOrgCodeChengdu());
             case "huanan" -> nullToEmpty(u9.getFactoryWarehouseOrgCodeHuanan());
             case "shuiqi" -> nullToEmpty(u9.getFactoryWarehouseOrgCodeShuiqi());
+            case "ningbo" -> nullToEmpty(u9.getFactoryWarehouseOrgCodeNingbo());
             default -> "";
         };
         if (StringUtils.hasText(orgCode)) {

@@ -30,4 +30,8 @@ public class U9MaterialYiguiRow {
     @JsonProperty("cangku_huanan")
     @JsonAlias({"华南仓库", "华南仓", "仓库华南", "仓库_华南", "huanan", "cangkuHuanan"})
     private String cangkuHuanan;
+
+    @JsonProperty("cangku_ningbo")
+    @JsonAlias({"宁波仓库", "宁波仓", "仓库宁波", "仓库_宁波", "ningbo", "cangkuNingbo"})
+    private String cangkuNingbo;
 }

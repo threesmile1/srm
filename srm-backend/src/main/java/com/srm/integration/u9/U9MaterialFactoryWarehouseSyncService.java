@@ -120,10 +120,11 @@ public class U9MaterialFactoryWarehouseSyncService {
                     material.setU9WarehouseSuzhou(trimToNull(yRow.getCangkuSuzhou()));
                     material.setU9WarehouseChengdu(trimToNull(yRow.getCangkuChengdu()));
                     material.setU9WarehouseHuanan(trimToNull(yRow.getCangkuHuanan()));
+                    material.setU9WarehouseNingbo(trimToNull(yRow.getCangkuNingbo()));
                     yu++;
                 } else if (yRow != null) {
                     ys++;
-                    errors.add("料号 " + code + "：衣柜报表有行但苏州/成都/华南仓字段未解析到值（请核对帆软列名与 JSON）");
+                    errors.add("料号 " + code + "：衣柜报表有行但苏州/成都/华南/宁波仓字段未解析到值（请核对帆软列名与 JSON）");
                 } else {
                     ys++;
                 }
@@ -296,7 +297,8 @@ public class U9MaterialFactoryWarehouseSyncService {
     private static boolean hasAnyYiguiWarehouse(U9MaterialYiguiRow r) {
         return StringUtils.hasText(r.getCangkuSuzhou())
                 || StringUtils.hasText(r.getCangkuChengdu())
-                || StringUtils.hasText(r.getCangkuHuanan());
+                || StringUtils.hasText(r.getCangkuHuanan())
+                || StringUtils.hasText(r.getCangkuNingbo());
     }
 
     /** 帆软列名多样：在标准反序列化后再按常见别名与列名模糊匹配补全 */
@@ -313,6 +315,10 @@ public class U9MaterialFactoryWarehouseSyncService {
             r.setCangkuHuanan(firstNonBlankByKeys(n,
                     "cangku_huanan", "华南仓库", "华南仓", "仓库华南", "仓库_华南", "CK_HN", "ck_huanan"));
         }
+        if (!StringUtils.hasText(r.getCangkuNingbo())) {
+            r.setCangkuNingbo(firstNonBlankByKeys(n,
+                    "cangku_ningbo", "宁波仓库", "宁波仓", "仓库宁波", "仓库_宁波", "CK_NB", "ck_ningbo"));
+        }
         if (!StringUtils.hasText(r.getCangkuSuzhou())) {
             r.setCangkuSuzhou(firstTextByKeyContains(n, "suzhou", "苏州"));
         }
@@ -321,6 +327,9 @@ public class U9MaterialFactoryWarehouseSyncService {
         }
         if (!StringUtils.hasText(r.getCangkuHuanan())) {
             r.setCangkuHuanan(firstTextByKeyContains(n, "huanan", "华南"));
+        }
+        if (!StringUtils.hasText(r.getCangkuNingbo())) {
+            r.setCangkuNingbo(firstTextByKeyContains(n, "ningbo", "宁波", "nb"));
         }
     }
 

@@ -51,6 +51,10 @@ public class MaterialItem extends BaseEntity {
     @Column(name = "u9_warehouse_shuiqi", length = 255)
     private String u9WarehouseShuiqi;
 
+    /** 宁波公司存储仓库（cangku_yigui.cpt：cangku_ningbo） */
+    @Column(name = "u9_warehouse_ningbo", length = 255)
+    private String u9WarehouseNingbo;
+
     @Column(name = "u9_supplier_code", length = 64)
     private String u9SupplierCode;
 

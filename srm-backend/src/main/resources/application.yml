@@ -75,6 +75,7 @@ srm:
     # factory-warehouse-org-code-chengdu: ""
     # factory-warehouse-org-code-huanan: ""
     # factory-warehouse-org-code-shuiqi: ""
+    # factory-warehouse-org-code-ningbo: "NB"
     # fine-report-parameters:
     #   - name: pinming
     #     type: String

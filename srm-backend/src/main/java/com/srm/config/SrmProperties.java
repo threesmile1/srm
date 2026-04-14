@@ -126,6 +126,7 @@ public class SrmProperties {
         private String factoryWarehouseOrgCodeChengdu = "";
         private String factoryWarehouseOrgCodeHuanan = "";
         private String factoryWarehouseOrgCodeShuiqi = "";
+        private String factoryWarehouseOrgCodeNingbo = "";
 
         private String httpUser = "";
         private String httpPassword = "";
