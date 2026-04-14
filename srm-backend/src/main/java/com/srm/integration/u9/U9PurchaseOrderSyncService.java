@@ -419,7 +419,10 @@ public class U9PurchaseOrderSyncService {
     }
 
     private static String normalizeAccountOrg(JsonNode row) {
-        for (String k : List.of("核算组织", "AccountOrg", "account_org", "Account_Org", "ACCOUNTORG")) {
+        for (String k : List.of(
+                "核算组织", "采购组织",
+                "AccountOrg", "account_org", "Account_Org", "ACCOUNTORG"
+        )) {
             String raw = firstText(row, k);
             if (StringUtils.hasText(raw)) {
                 return raw.trim();
@@ -444,7 +447,10 @@ public class U9PurchaseOrderSyncService {
     }
 
     private static String buildRemark(JsonNode first, String docNo) {
-        String seg = firstText(first, "来源正式订单号_全局段5", "来源正式订单号", "DescFlexField_PrivateDescSeg5");
+        String seg = firstText(first,
+                "正式订单号",
+                "来源正式订单号_全局段5", "来源正式订单号",
+                "DescFlexField_PrivateDescSeg5");
         if (StringUtils.hasText(seg)) {
             return "U9 " + docNo + " | " + seg;
         }

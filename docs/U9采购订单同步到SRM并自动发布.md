@@ -102,7 +102,7 @@ U9 采购订单/采购订单行常见枚举：`UFIDA.U9.PM.PO.PODOCStatusEnum`
 > - **已审核**：`po.Status = 2` 且 `pl.Status = 2`
 > - **未作废**：`Cancel_Canceled = 0`（头/行）
 > - **未关闭**：`IsBizClosed = 0` 且 `IsFIClose = 0`（头/行）
-> - **核算组织**：示例过滤 `po.AccountOrg = 1001711275375071`（宁波公司）；按需修改/删除
+> - **采购组织（核算组织 AccountOrg）**：示例过滤 `po.AccountOrg = 1001711275375071`（宁波公司）；按需修改/删除
 >
 > SRM 侧采购组织映射（建议）：
 >
@@ -131,10 +131,10 @@ SELECT
   po.BusinessDate                                   AS [业务日期],
 
   /* 头表：私有扩展段（你们现场映射；列名以数据库为准） */
-  po.DescFlexField_PrivateDescSeg5                  AS [来源正式订单号_全局段5],
-  po.DescFlexField_PrivateDescSeg8                  AS [二级门店_全局段8],
-  po.DescFlexField_PrivateDescSeg3                  AS [收货人名称_全局段3],
-  po.DescFlexField_PrivateDescSeg11                 AS [终端电话_全局段11],
+  po.DescFlexField_PrivateDescSeg5                  AS [正式订单号],
+  po.DescFlexField_PrivateDescSeg8                  AS [二级门店],
+  po.DescFlexField_PrivateDescSeg3                  AS [收货人名称],
+  po.DescFlexField_PrivateDescSeg11                 AS [终端电话],
   NULLIF(LTRIM(RTRIM(po.DescFlexField_PrivateDescSeg10)), '') AS [安装地址],
 
   pl.ItemInfo_ItemName                              AS [料品名称],
@@ -145,7 +145,7 @@ SELECT
   s.Code                                            AS [供应商编码],
 
   po.DocNo                                          AS [单据编号],
-  po.DocumentType                                   AS [单据类型_ID],
+  po.DocumentType                                   AS [单据类型],
 
   uom.Code                                          AS [销售单位],
   pl.PurQtyCU                                       AS [销售数量],
@@ -155,7 +155,7 @@ SELECT
   /* 最新计划行交期：按计划行 ID 倒序取第一条 */
   psl.DeliveryDate                                  AS [要求交货日期],
 
-  po.AccountOrg                                     AS [核算组织],
+  po.AccountOrg                                     AS [采购组织],
   CASE po.Status
     WHEN 0 THEN N'开立'
     WHEN 1 THEN N'审核中'
@@ -196,7 +196,7 @@ WHERE 1 = 1
   AND ISNULL(pl.IsFIClose, 0) = 0
 
   AND po.CreatedOn >= @FromDate
-  AND po.AccountOrg = 1001711275375071 -- 核算组织：宁波公司（按需修改/删除）
+  AND po.AccountOrg = 1001711275375071 -- 采购组织：宁波公司（按需修改/删除）
 ORDER BY po.DocNo, pl.DocLineNo;
 ```
 
@@ -220,7 +220,7 @@ ORDER BY po.CreatedOn DESC;
 
 - **管理端**：采购订单列表中，仅在当前选中采购组织为 **宁波公司**（`org_unit.code=NB` 或 `name=宁波公司` 或 `u9_org_code=1001711275375071`）时显示「从 U9 同步采购订单（帆软）」；接口仍为 **`POST /api/v1/purchase-orders/sync-from-u9`**（需登录，读超时建议 10 分钟级，与物料同步一致）。
 - **帆软请求体**：与物料共用 `srm.u9.decision-api-url`、`datasource-name`、`page_number` / `sync-page-size` 分页逻辑；报表路径默认 **`srm.u9.purchase-order-report-path: API/caigou_cp.cpt`**；**`parameters` 默认一条空对象 `[{}]`**（与现场一致）。若模板需要具名参数，可在配置中设置 `purchase-order-fine-report-parameters`（格式同 `fine-report-parameters`）。
-- **落库规则**：按 **`purchase_order.u9_doc_no` = U9 `单据编号`** 且 **`procurement_org_id`**（由行上 **`核算组织` → `org_unit.u9_org_code`** 解析）做幂等；新建单为 **已审核并自动发布**（`RELEASED` + 供应商通知）。重复同步时，若订单**已有收货**则拒绝覆盖；否则整单替换行。
+- **落库规则**：按 **`purchase_order.u9_doc_no` = U9 `单据编号`** 且 **`procurement_org_id`**（由行上 **`采购组织`/`核算组织`（AccountOrg） → `org_unit.u9_org_code`** 解析）做幂等；新建单为 **已审核并自动发布**（`RELEASED` + 供应商通知）。重复同步时，若订单**已有收货**则拒绝覆盖；否则整单替换行。
 - **仓库**：当前取该采购组织下 **按编码排序的第一个仓库** 作为行仓库（与「每行非空 warehouse」约束兼容）。若报表后续增加仓库列，可再扩展映射。
 
 ---
