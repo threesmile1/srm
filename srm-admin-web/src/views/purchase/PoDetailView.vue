@@ -137,12 +137,14 @@ onMounted(async () => {
           <el-table-column prop="lineNo" label="行" width="60" />
           <el-table-column prop="materialCode" label="物料" width="120" />
           <el-table-column prop="materialName" label="名称" />
+          <el-table-column prop="materialSpec" label="规格" width="120" show-overflow-tooltip />
           <el-table-column prop="qty" label="数量" width="100" />
           <el-table-column prop="receivedQty" label="已收" width="90" />
           <el-table-column prop="uom" label="单位" width="70" />
           <el-table-column prop="unitPrice" label="单价" width="100" />
           <el-table-column prop="amount" label="金额" width="100" />
           <el-table-column prop="warehouseCode" label="仓库" width="100" />
+          <el-table-column prop="requestedDate" label="要求交货日期" width="120" />
           <el-table-column prop="confirmedQty" label="确认数量" width="100" />
           <el-table-column prop="promisedDate" label="承诺交期" width="120" />
         </el-table>

@@ -17,6 +17,7 @@ export type PoLine = {
   materialId: number
   materialCode: string
   materialName: string
+  materialSpec: string | null
   qty: string
   receivedQty: string
   uom: string
