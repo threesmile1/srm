@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { executionApi, type PurchaseExecutionRow } from '../../api/execution'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
@@ -12,6 +13,7 @@ const rows = ref<PurchaseExecutionRow[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const loading = ref(false)
 const qPoNo = ref('')
 const qU9DocNo = ref('')
 const qOfficialOrderNo = ref('')
@@ -25,26 +27,37 @@ async function loadOrgs() {
 
 async function loadReport() {
   if (orgId.value == null) return
-  const r = await executionApi.purchaseExecutionReportPaged(orgId.value, currentPage.value - 1, pageSize.value, {
-    poNo: qPoNo.value || undefined,
-    u9DocNo: qU9DocNo.value || undefined,
-    officialOrderNo: qOfficialOrderNo.value || undefined,
-  })
-  rows.value = r.data.content
-  total.value = r.data.totalElements
+  loading.value = true
+  try {
+    const r = await executionApi.purchaseExecutionReportPaged(orgId.value, currentPage.value - 1, pageSize.value, {
+      poNo: qPoNo.value || undefined,
+      u9DocNo: qU9DocNo.value || undefined,
+      officialOrderNo: qOfficialOrderNo.value || undefined,
+    })
+    rows.value = r.data.content
+    total.value = r.data.totalElements
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '查询失败')
+  } finally {
+    loading.value = false
+  }
 }
 
-function doSearch() {
+async function doSearch() {
   currentPage.value = 1
-  loadReport()
+  await loadReport()
 }
 
-function resetSearch() {
+async function resetSearch() {
   qPoNo.value = ''
   qU9DocNo.value = ''
   qOfficialOrderNo.value = ''
   currentPage.value = 1
-  loadReport()
+  await loadReport()
 }
 
 watch(orgId, () => {
@@ -76,7 +89,7 @@ onMounted(async () => {
       <el-button @click="resetSearch">重置</el-button>
     </div>
     <p class="hint">已发布/已关闭订单行：订购、已收、未清数量。</p>
-    <el-table :data="rows" stripe table-layout="auto">
+    <el-table :data="rows" stripe table-layout="auto" v-loading="loading">
       <template #empty>
         <DataTableEmpty />
       </template>
