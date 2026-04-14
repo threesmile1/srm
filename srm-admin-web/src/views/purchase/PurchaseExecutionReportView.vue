@@ -59,7 +59,7 @@ onMounted(async () => {
       <el-table-column prop="u9DocNo" label="U9单号" width="160" show-overflow-tooltip />
       <el-table-column prop="poStatus" label="订单状态" width="100" />
       <el-table-column prop="businessDate" label="业务日期" width="110" />
-      <el-table-column prop="officialOrderNo" label="正式订单号" min-width="288" show-overflow-tooltip />
+      <el-table-column prop="officialOrderNo" label="正式订单号" min-width="350" show-overflow-tooltip />
       <el-table-column prop="store2" label="二级门店" width="120" show-overflow-tooltip />
       <el-table-column prop="receiverName" label="收货人" width="110" show-overflow-tooltip />
       <el-table-column prop="terminalPhone" label="终端电话" width="120" show-overflow-tooltip />
