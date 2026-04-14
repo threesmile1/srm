@@ -77,6 +77,7 @@ public class DevDataBootstrap implements ApplicationRunner {
                 {"P02", "二厂采购组织", "ORG-P02"},
                 {"P03", "三厂采购组织", "ORG-P03"},
                 {"P04", "四厂采购组织", "ORG-P04"},
+                {"NB", "宁波公司", "1001711275375071"},
         };
         OrgUnit firstProc = null;
         for (String[] f : factories) {

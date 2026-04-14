@@ -104,6 +104,11 @@ U9 采购订单/采购订单行常见枚举：`UFIDA.U9.PM.PO.PODOCStatusEnum`
 > - **未关闭**：`IsBizClosed = 0` 且 `IsFIClose = 0`（头/行）
 > - **核算组织**：示例过滤 `po.AccountOrg = 1001711275375071`（宁波公司）；按需修改/删除
 >
+> SRM 侧采购组织映射（建议）：
+>
+> - 在 SRM `org_unit` 增加一条采购组织（示例：`code = NB`，`name = 宁波公司`），并把 **`u9_org_code` 写成 U9 的 `AccountOrg` 数值字符串**：`1001711275375071`。
+> - 同步程序用 `po.AccountOrg` → `org_unit.u9_org_code` 解析 `procurement_org_id`（找不到则进入待处理/告警）。
+>
 > 扩展字段说明：
 >
 > - 你们现场把业务信息落在头表 **`DescFlexField_PrivateDescSeg*`**（私有扩展段）。虽然 UI 文案可能写“全局段”，但 **数据库列名以 `PrivateDescSeg` 为准**。
@@ -132,11 +137,15 @@ SELECT
 
   pl.ItemInfo_ItemName                              AS [料品名称],
   im.SPECS                                          AS [料品规格],
+  im.Code                                           AS [物料编码],
 
+  /* 供应商：优先用 PO 头上的“快照字段”，再回落到主档/多语表（避免仅 join 翻译表导致空名） */
   COALESCE(NULLIF(LTRIM(RTRIM(po.Supplier_ShortName)), ''),
-           NULLIF(LTRIM(RTRIM(po.Supplier_Code)), ''),
-           st.Name,
-           s.Code)                                   AS [供应商],
+           NULLIF(LTRIM(RTRIM(st.Name)), ''),
+           NULLIF(LTRIM(RTRIM(st.ShortName)), ''))   AS [供应商名称],
+
+  COALESCE(NULLIF(LTRIM(RTRIM(po.Supplier_Code)), ''),
+           NULLIF(LTRIM(RTRIM(s.Code)), ''))        AS [供应商编码],
 
   po.DocNo                                          AS [单据编号],
   po.DocumentType                                   AS [单据类型_ID],
