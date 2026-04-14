@@ -119,7 +119,7 @@ function formatDateTimeIso(s: string | null | undefined) {
       <el-table-column prop="poNo" label="订单号" width="200" />
       <el-table-column prop="status" label="状态" width="100" />
       <el-table-column prop="supplierName" label="供应商" />
-      <el-table-column prop="officialOrderNo" label="正式订单号" width="160" show-overflow-tooltip />
+      <el-table-column prop="officialOrderNo" label="正式订单号" min-width="260" show-overflow-tooltip />
       <el-table-column label="发布日期" width="110" show-overflow-tooltip>
         <template #default="{ row }">
           {{ formatDateTimeIso(row.releasedAt) }}
