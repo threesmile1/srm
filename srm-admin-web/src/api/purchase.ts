@@ -46,6 +46,14 @@ export type PoImportResult = {
   errors: string[]
 }
 
+export type U9PurchaseOrderSyncResult = {
+  rowCount: number
+  ordersCreated: number
+  ordersUpdated: number
+  skipped: number
+  errors: string[]
+}
+
 export const purchaseApi = {
   list: (procurementOrgId: number) =>
     api.get<PoSummary[]>('/api/v1/purchase-orders', { params: { procurementOrgId } }),
@@ -74,4 +82,6 @@ export const purchaseApi = {
     fd.append('file', file)
     return api.post<PoImportResult>('/api/v1/purchase-orders/import', fd)
   },
+  syncFromU9: () =>
+    api.post<U9PurchaseOrderSyncResult>('/api/v1/purchase-orders/sync-from-u9', undefined, { timeout: 600_000 }),
 }

@@ -55,6 +55,10 @@ public class PurchaseOrder extends BaseEntity {
     @Column(length = 2000)
     private String remark;
 
+    /** U9 采购订单号（PM_PurchaseOrder.DocNo），与 procurement_org_id 组合唯一，用于帆软 caigou 同步幂等 */
+    @Column(name = "u9_doc_no", length = 128)
+    private String u9DocNo;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "export_status", nullable = false, length = 32)
     private ExportStatus exportStatus = ExportStatus.NOT_EXPORTED;

@@ -90,6 +90,16 @@ public class SrmProperties {
         private String warehouseReportPath = "API/cangku.cpt";
 
         /**
+         * 采购订单 caigou_cp.cpt（与 wuliao 共用 decision-api-url；parameters 默认一条空对象，与现场帆软一致）。
+         */
+        private String purchaseOrderReportPath = "API/caigou_cp.cpt";
+
+        /**
+         * 采购订单报表 parameters；空则 POST {@code [{}]}（与物料可配 pinming 不同）。
+         */
+        private List<FineReportParameter> purchaseOrderFineReportParameters = new ArrayList<>();
+
+        /**
          * 料号-多厂仓库（衣柜等）：liaohao + cangku_suzhou/cangku_chengdu/cangku_huanan。
          */
         private String materialYiguiReportPath = "API/cangku_yigui.cpt";

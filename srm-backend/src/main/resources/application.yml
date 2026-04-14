@@ -62,6 +62,9 @@ srm:
     # supplier-report-path: API/lpgys.cpt
     # 仓库 cangku.cpt（parameters: name=cangku, value 空串）
     # warehouse-report-path: API/cangku.cpt
+    # U9 已审核未关闭采购订单 → SRM（帆软 parameters 默认同现场 [{}]）
+    # purchase-order-report-path: API/caigou_cp.cpt
+    # purchase-order-fine-report-parameters: []
     # 物料四厂默认仓：按料号逐次请求 cangku_yigui + cangku_shuiqi（parameters 默认 name=code、value=料号）
     # material-yigui-report-path: API/cangku_yigui.cpt
     # material-shuiqi-report-path: API/cangku_shuiqi.cpt

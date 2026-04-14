@@ -27,12 +27,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -59,6 +61,14 @@ public class PurchaseOrderService {
     public PurchaseOrder requireDetail(Long id) {
         return purchaseOrderRepository.findWithDetailsById(id)
                 .orElseThrow(() -> new NotFoundException("采购订单不存在: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsU9Document(Long procurementOrgId, String u9DocNo) {
+        if (!StringUtils.hasText(u9DocNo)) {
+            return false;
+        }
+        return purchaseOrderRepository.existsByProcurementOrg_IdAndU9DocNo(procurementOrgId, u9DocNo.trim());
     }
 
     @Transactional
@@ -89,7 +99,117 @@ public class PurchaseOrderService {
         po.setRevisionNo(1);
         po.setRemark(remark);
 
-        int n = 1;
+        appendCreateLines(po, lines);
+
+        if (po.getLines().isEmpty()) {
+            throw new BadRequestException("订单至少一行");
+        }
+
+        PurchaseOrder saved = purchaseOrderRepository.save(po);
+        auditService.log(null, null, "CREATE_PO", "PO", saved.getId(),
+                "poNo=" + saved.getPoNo() + " lines=" + saved.getLines().size(), null);
+        return saved;
+    }
+
+    /**
+     * U9 帆软已审采购订单同步：按采购组织 + U9 单号幂等；新建或覆盖（无收货）后自动 {@link PoStatus#RELEASED} 并通知供应商。
+     */
+    @Transactional
+    public PurchaseOrder upsertFromU9AndRelease(
+            Long procurementOrgId,
+            String u9DocNo,
+            Long supplierId,
+            String currency,
+            String remark,
+            List<CreateLine> lines) {
+        if (!StringUtils.hasText(u9DocNo)) {
+            throw new BadRequestException("U9 单据编号不能为空");
+        }
+        String u9Key = u9DocNo.trim();
+        OrgUnit org = orgUnitRepository.findById(procurementOrgId)
+                .orElseThrow(() -> new NotFoundException("采购组织不存在: " + procurementOrgId));
+        if (org.getOrgType() != OrgUnitType.PROCUREMENT) {
+            throw new BadRequestException("请选择采购组织");
+        }
+        Supplier supplier = masterDataService.requireSupplier(supplierId);
+        masterDataService.assertSupplierAuthorizedForOrg(supplier, org);
+        masterDataService.assertSupplierAllowedForPurchaseOrder(supplier);
+        Ledger ledger = org.getLedger();
+        if (ledger == null) {
+            throw new BadRequestException("采购组织未关联账套");
+        }
+        if (lines == null || lines.isEmpty()) {
+            throw new BadRequestException("订单至少一行");
+        }
+
+        Optional<PurchaseOrder> existingOpt =
+                purchaseOrderRepository.findByProcurementOrg_IdAndU9DocNo(org.getId(), u9Key);
+        if (existingOpt.isPresent()) {
+            return refreshU9PurchaseOrderLinesAndRelease(existingOpt.get(), supplier, currency, remark, lines);
+        }
+
+        String poNo = poNumberService.nextPoNo(org);
+        PurchaseOrder po = new PurchaseOrder();
+        po.setPoNo(poNo);
+        po.setProcurementOrg(org);
+        po.setLedger(ledger);
+        po.setSupplier(supplier);
+        po.setCurrency(currency != null && !currency.isBlank() ? currency : "CNY");
+        po.setU9DocNo(u9Key);
+        po.setRemark(remark);
+        po.setRevisionNo(1);
+        po.setStatus(PoStatus.DRAFT);
+
+        appendCreateLines(po, lines);
+
+        PurchaseOrder saved = purchaseOrderRepository.save(po);
+        saved.setStatus(PoStatus.APPROVED);
+        saved = purchaseOrderRepository.save(saved);
+        auditService.log(null, null, "CREATE_PO_U9", "PO", saved.getId(),
+                "poNo=" + saved.getPoNo() + " u9DocNo=" + u9Key + " lines=" + saved.getLines().size(), null);
+        return release(saved.getId());
+    }
+
+    private PurchaseOrder refreshU9PurchaseOrderLinesAndRelease(
+            PurchaseOrder po,
+            Supplier supplier,
+            String currency,
+            String remark,
+            List<CreateLine> lines) {
+        if (po.getStatus() == PoStatus.CANCELLED || po.getStatus() == PoStatus.CLOSED) {
+            throw new BadRequestException("订单已关闭或取消，不可覆盖同步: " + po.getPoNo());
+        }
+        if (po.getStatus() == PoStatus.PENDING_APPROVAL || po.getStatus() == PoStatus.DRAFT) {
+            throw new BadRequestException("订单状态异常(U9同步)，请人工处理: " + po.getPoNo() + " " + po.getStatus());
+        }
+        for (PurchaseOrderLine old : po.getLines()) {
+            if (old.getReceivedQty() != null && old.getReceivedQty().compareTo(BigDecimal.ZERO) > 0) {
+                throw new BadRequestException("订单已有收货，禁止整单覆盖: " + po.getPoNo());
+            }
+        }
+        if (!po.getSupplier().getId().equals(supplier.getId())) {
+            masterDataService.assertSupplierAuthorizedForOrg(supplier, po.getProcurementOrg());
+            masterDataService.assertSupplierAllowedForPurchaseOrder(supplier);
+            po.setSupplier(supplier);
+        }
+        if (StringUtils.hasText(currency)) {
+            po.setCurrency(currency.trim());
+        }
+        po.setRemark(remark);
+        po.getLines().clear();
+        appendCreateLines(po, lines);
+        PurchaseOrder saved = purchaseOrderRepository.save(po);
+        auditService.log(null, null, "UPDATE_PO_U9", "PO", saved.getId(),
+                "poNo=" + saved.getPoNo() + " lines=" + saved.getLines().size(), null);
+        if (saved.getStatus() == PoStatus.APPROVED) {
+            return release(saved.getId());
+        }
+        return saved;
+    }
+
+    private void appendCreateLines(PurchaseOrder po, List<CreateLine> lines) {
+        OrgUnit org = po.getProcurementOrg();
+        int n = po.getLines().stream().mapToInt(PurchaseOrderLine::getLineNo).max().orElse(0) + 1;
         for (CreateLine cl : lines) {
             MaterialItem mat = masterDataService.requireMaterial(cl.materialId());
             Warehouse wh = warehouseRepository.findById(cl.warehouseId())
@@ -99,7 +219,9 @@ public class PurchaseOrderService {
             }
             BigDecimal qty = cl.qty();
             BigDecimal price = cl.unitPrice();
-            BigDecimal amount = qty.multiply(price).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal amount = cl.amountOverride() != null
+                    ? cl.amountOverride().setScale(4, RoundingMode.HALF_UP)
+                    : qty.multiply(price).setScale(4, RoundingMode.HALF_UP);
 
             PurchaseOrderLine line = new PurchaseOrderLine();
             line.setPurchaseOrder(po);
@@ -113,15 +235,6 @@ public class PurchaseOrderService {
             line.setWarehouse(wh);
             po.getLines().add(line);
         }
-
-        if (po.getLines().isEmpty()) {
-            throw new BadRequestException("订单至少一行");
-        }
-
-        PurchaseOrder saved = purchaseOrderRepository.save(po);
-        auditService.log(null, null, "CREATE_PO", "PO", saved.getId(),
-                "poNo=" + saved.getPoNo() + " lines=" + saved.getLines().size(), null);
-        return saved;
     }
 
     @Transactional
@@ -250,6 +363,18 @@ public class PurchaseOrderService {
             BigDecimal qty,
             String uom,
             BigDecimal unitPrice,
-            LocalDate requestedDate
-    ) {}
+            LocalDate requestedDate,
+            /** 非空时写入行金额（如 U9 价税合计），否则为 qty×unitPrice */
+            BigDecimal amountOverride
+    ) {
+        public CreateLine(
+                Long materialId,
+                Long warehouseId,
+                BigDecimal qty,
+                String uom,
+                BigDecimal unitPrice,
+                LocalDate requestedDate) {
+            this(materialId, warehouseId, qty, uom, unitPrice, requestedDate, null);
+        }
+    }
 }

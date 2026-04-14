@@ -19,6 +19,7 @@ const tableRef = ref()
 const importDialogVisible = ref(false)
 const importResult = ref<PoImportResult | null>(null)
 const importing = ref(false)
+const u9PoSyncing = ref(false)
 
 const statusMap: Record<string, string> = {
   DRAFT: '草稿',
@@ -75,6 +76,30 @@ async function exportSelected() {
   }
 }
 
+async function syncPurchaseOrdersFromU9() {
+  u9PoSyncing.value = true
+  try {
+    const r = await purchaseApi.syncFromU9()
+    const errN = r.data.errors?.length ?? 0
+    if (errN === 0) {
+      ElMessage.success(
+        `U9 采购订单同步完成：新建 ${r.data.ordersCreated}，更新 ${r.data.ordersUpdated}，帆软行 ${r.data.rowCount}`,
+      )
+    } else {
+      ElMessage.warning(`同步结束：新建 ${r.data.ordersCreated}，更新 ${r.data.ordersUpdated}，失败/跳过 ${errN} 条`)
+    }
+    await loadPos()
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || 'U9 采购订单同步失败')
+  } finally {
+    u9PoSyncing.value = false
+  }
+}
+
 async function handleImport(uploadFile: { raw: File }) {
   importing.value = true
   importResult.value = null
@@ -103,6 +128,9 @@ async function handleImport(uploadFile: { raw: File }) {
       </el-select>
       <el-button type="primary" @click="$router.push('/purchase/orders/new')">新建</el-button>
       <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
+      <el-button type="success" plain :loading="u9PoSyncing" @click="syncPurchaseOrdersFromU9">
+        从 U9 同步采购订单（帆软）
+      </el-button>
       <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
     <el-table ref="tableRef" :data="rows" stripe @row-dblclick="(row: PoSummary) => goDetail(row.id)">

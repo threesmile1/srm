@@ -22,6 +22,13 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     Optional<PurchaseOrder> findByPoNo(String poNo);
 
     @EntityGraph(attributePaths = {
+            "lines", "lines.material", "lines.warehouse", "supplier", "procurementOrg", "ledger"
+    })
+    Optional<PurchaseOrder> findByProcurementOrg_IdAndU9DocNo(Long procurementOrgId, String u9DocNo);
+
+    boolean existsByProcurementOrg_IdAndU9DocNo(Long procurementOrgId, String u9DocNo);
+
+    @EntityGraph(attributePaths = {
             "lines", "lines.material", "lines.warehouse",
             "procurementOrg", "ledger", "supplier"
     })

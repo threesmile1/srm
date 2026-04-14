@@ -2,6 +2,7 @@ package com.srm.po.web;
 
 import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
+import com.srm.integration.u9.U9PurchaseOrderSyncService;
 import com.srm.po.service.PoImportService;
 import com.srm.po.service.PoImportService.PoImportResult;
 import com.srm.po.service.PurchaseOrderService;
@@ -32,6 +33,7 @@ public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
     private final PoImportService poImportService;
+    private final U9PurchaseOrderSyncService u9PurchaseOrderSyncService;
 
     @GetMapping
     public List<PoSummaryResponse> list(@RequestParam Long procurementOrgId) {
@@ -68,6 +70,15 @@ public class PurchaseOrderController {
     @PostMapping("/import")
     public PoImportResult importOrders(@RequestParam("file") MultipartFile file) {
         return poImportService.importOrders(file);
+    }
+
+    /**
+     * 从帆软拉取 U9 已审核未关闭采购订单（{@code srm.u9.purchase-order-report-path}，默认 API/caigou_cp.cpt），
+     * 写入 SRM 并自动发布给供应商（幂等键：采购组织 + U9 单据编号）。
+     */
+    @PostMapping("/sync-from-u9")
+    public U9PurchaseOrderSyncService.U9PurchaseOrderSyncResult syncPurchaseOrdersFromU9() {
+        return u9PurchaseOrderSyncService.fetchAndApply();
     }
 
     @PostMapping("/{id}/submit")
