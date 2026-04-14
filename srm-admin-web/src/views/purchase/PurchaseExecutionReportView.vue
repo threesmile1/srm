@@ -12,6 +12,9 @@ const rows = ref<PurchaseExecutionRow[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const qPoNo = ref('')
+const qU9DocNo = ref('')
+const qOfficialOrderNo = ref('')
 
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
@@ -22,9 +25,26 @@ async function loadOrgs() {
 
 async function loadReport() {
   if (orgId.value == null) return
-  const r = await executionApi.purchaseExecutionReportPaged(orgId.value, currentPage.value - 1, pageSize.value)
+  const r = await executionApi.purchaseExecutionReportPaged(orgId.value, currentPage.value - 1, pageSize.value, {
+    poNo: qPoNo.value || undefined,
+    u9DocNo: qU9DocNo.value || undefined,
+    officialOrderNo: qOfficialOrderNo.value || undefined,
+  })
   rows.value = r.data.content
   total.value = r.data.totalElements
+}
+
+function doSearch() {
+  currentPage.value = 1
+  loadReport()
+}
+
+function resetSearch() {
+  qPoNo.value = ''
+  qU9DocNo.value = ''
+  qOfficialOrderNo.value = ''
+  currentPage.value = 1
+  loadReport()
 }
 
 watch(orgId, () => {
@@ -49,6 +69,11 @@ onMounted(async () => {
       <el-select v-model="orgId" placeholder="采购组织" style="width: 220px">
         <el-option v-for="o in orgs" :key="o.id" :label="`${o.code} ${o.name}`" :value="o.id" />
       </el-select>
+      <el-input v-model="qPoNo" placeholder="订单号" clearable style="width: 200px" @keyup.enter="doSearch" />
+      <el-input v-model="qU9DocNo" placeholder="U9单号" clearable style="width: 200px" @keyup.enter="doSearch" />
+      <el-input v-model="qOfficialOrderNo" placeholder="正式订单号" clearable style="width: 220px" @keyup.enter="doSearch" />
+      <el-button type="primary" @click="doSearch">查询</el-button>
+      <el-button @click="resetSearch">重置</el-button>
     </div>
     <p class="hint">已发布/已关闭订单行：订购、已收、未清数量。</p>
     <el-table :data="rows" stripe table-layout="auto">

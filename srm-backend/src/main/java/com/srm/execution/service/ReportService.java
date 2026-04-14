@@ -84,10 +84,19 @@ public class ReportService {
     ) {}
 
     @Transactional(readOnly = true)
-    public Page<PurchaseExecutionRow> purchaseExecutionPaged(Long procurementOrgId, int page, int size) {
+    public Page<PurchaseExecutionRow> purchaseExecutionPaged(Long procurementOrgId,
+                                                            String poNo,
+                                                            String u9DocNo,
+                                                            String officialOrderNo,
+                                                            int page,
+                                                            int size) {
         int p = Math.max(0, page);
         int s = Math.min(Math.max(size, 10), 200);
         int offset = p * s;
+
+        String poLike = likeOrNull(poNo);
+        String u9Like = likeOrNull(u9DocNo);
+        String officialLike = likeOrNull(officialOrderNo);
 
         Object totalObj = entityManager.createNativeQuery("""
                         select count(*)
@@ -95,8 +104,14 @@ public class ReportService {
                         join purchase_order po on po.id = pol.purchase_order_id
                         where po.procurement_org_id = :oid
                           and po.status in ('RELEASED','CLOSED')
+                          and (:poNo is null or po.po_no like :poNo)
+                          and (:u9DocNo is null or po.u9_doc_no like :u9DocNo)
+                          and (:officialOrderNo is null or po.u9_official_order_no like :officialOrderNo)
                         """)
                 .setParameter("oid", procurementOrgId)
+                .setParameter("poNo", poLike)
+                .setParameter("u9DocNo", u9Like)
+                .setParameter("officialOrderNo", officialLike)
                 .getSingleResult();
         long total = toLong(totalObj);
 
@@ -123,10 +138,16 @@ public class ReportService {
                         join material_item m on m.id = pol.material_id
                         where po.procurement_org_id = :oid
                           and po.status in ('RELEASED','CLOSED')
+                          and (:poNo is null or po.po_no like :poNo)
+                          and (:u9DocNo is null or po.u9_doc_no like :u9DocNo)
+                          and (:officialOrderNo is null or po.u9_official_order_no like :officialOrderNo)
                         order by po.id desc, pol.line_no asc
                         limit :lim offset :off
                         """)
                 .setParameter("oid", procurementOrgId)
+                .setParameter("poNo", poLike)
+                .setParameter("u9DocNo", u9Like)
+                .setParameter("officialOrderNo", officialLike)
                 .setParameter("lim", s)
                 .setParameter("off", offset)
                 .getResultList();
@@ -152,6 +173,13 @@ public class ReportService {
             ));
         }
         return new PageImpl<>(rows, org.springframework.data.domain.PageRequest.of(p, s), total);
+    }
+
+    private static String likeOrNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        if (t.isEmpty()) return null;
+        return "%" + t + "%";
     }
 
     private static long toLong(Object o) {

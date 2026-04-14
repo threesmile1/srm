@@ -170,9 +170,14 @@ export const executionApi = {
   purchaseExecutionReport: (procurementOrgId: number) =>
     api.get<PurchaseExecutionRow[]>('/api/v1/reports/purchase-execution', { params: { procurementOrgId } }),
 
-  purchaseExecutionReportPaged: (procurementOrgId: number, page: number, size: number) =>
+  purchaseExecutionReportPaged: (
+    procurementOrgId: number,
+    page: number,
+    size: number,
+    q?: { poNo?: string; u9DocNo?: string; officialOrderNo?: string },
+  ) =>
     api.get<SpringPage<PurchaseExecutionRow>>('/api/v1/reports/purchase-execution/paged', {
-      params: { procurementOrgId, page, size },
+      params: { procurementOrgId, page, size, ...(q || {}) },
     }),
 
   purchaseAmountTrend: (procurementOrgId: number, months = 12) =>

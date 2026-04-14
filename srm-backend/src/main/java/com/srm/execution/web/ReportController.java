@@ -28,10 +28,13 @@ public class ReportController {
     @GetMapping("/purchase-execution/paged")
     public Page<ReportService.PurchaseExecutionRow> purchaseExecutionPaged(
             @RequestParam Long procurementOrgId,
+            @RequestParam(required = false) String poNo,
+            @RequestParam(required = false) String u9DocNo,
+            @RequestParam(required = false) String officialOrderNo,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return reportService.purchaseExecutionPaged(procurementOrgId, page, size);
+        return reportService.purchaseExecutionPaged(procurementOrgId, poNo, u9DocNo, officialOrderNo, page, size);
     }
 
     @GetMapping("/analytics/purchase-amount-trend")
