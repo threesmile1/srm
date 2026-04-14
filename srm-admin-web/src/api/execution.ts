@@ -70,6 +70,7 @@ export type GrDetail = GrSummary & {
 
 export type PurchaseExecutionRow = {
   poNo: string
+  u9DocNo: string | null
   poStatus: string
   businessDate: string | null
   officialOrderNo: string | null

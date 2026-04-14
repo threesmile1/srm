@@ -45,6 +45,7 @@ public class ReportService {
                 }
                 rows.add(new PurchaseExecutionRow(
                         po.getPoNo(),
+                        po.getU9DocNo(),
                         po.getStatus().name(),
                         po.getU9BusinessDate() != null ? po.getU9BusinessDate().toString() : null,
                         po.getU9OfficialOrderNo(),
@@ -66,6 +67,7 @@ public class ReportService {
 
     public record PurchaseExecutionRow(
             String poNo,
+            String u9DocNo,
             String poStatus,
             String businessDate,
             String officialOrderNo,
@@ -102,6 +104,7 @@ public class ReportService {
         List<Object[]> raw = entityManager.createNativeQuery("""
                         select
                             po.po_no,
+                            po.u9_doc_no,
                             po.status,
                             po.u9_business_date,
                             po.u9_official_order_no,
@@ -133,18 +136,19 @@ public class ReportService {
             rows.add(new PurchaseExecutionRow(
                     (String) r[0],
                     (String) r[1],
-                    r[2] != null ? r[2].toString() : null,
-                    (String) r[3],
+                    (String) r[2],
+                    r[3] != null ? r[3].toString() : null,
                     (String) r[4],
                     (String) r[5],
                     (String) r[6],
                     (String) r[7],
-                    ((Number) r[8]).intValue(),
-                    (String) r[9],
+                    (String) r[8],
+                    ((Number) r[9]).intValue(),
                     (String) r[10],
-                    toBd(r[11]),
+                    (String) r[11],
                     toBd(r[12]),
-                    toBd(r[13])
+                    toBd(r[13]),
+                    toBd(r[14])
             ));
         }
         return new PageImpl<>(rows, org.springframework.data.domain.PageRequest.of(p, s), total);

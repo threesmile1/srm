@@ -56,6 +56,7 @@ onMounted(async () => {
         <DataTableEmpty />
       </template>
       <el-table-column prop="poNo" label="订单号" width="160" />
+      <el-table-column prop="u9DocNo" label="U9单号" width="160" show-overflow-tooltip />
       <el-table-column prop="poStatus" label="订单状态" width="100" />
       <el-table-column prop="businessDate" label="业务日期" width="110" />
       <el-table-column prop="officialOrderNo" label="正式订单号" width="160" show-overflow-tooltip />
