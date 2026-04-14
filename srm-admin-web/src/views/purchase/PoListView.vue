@@ -66,9 +66,19 @@ async function loadPos() {
         ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
         : ''
     ElMessage.warning(msg || '分页加载失败，已回退为全量加载（请重启后端或刷新）')
-    const r = await purchaseApi.list(orgId.value)
-    rows.value = r.data
-    total.value = r.data.length
+    try {
+      const r = await purchaseApi.list(orgId.value)
+      rows.value = r.data
+      total.value = r.data.length
+    } catch (e2: unknown) {
+      const msg2 =
+        e2 && typeof e2 === 'object' && 'response' in e2
+          ? (e2 as { response?: { data?: { error?: string } } }).response?.data?.error
+          : ''
+      ElMessage.error(msg2 || '加载失败（请检查是否登录过期/后端是否已启动）')
+      rows.value = []
+      total.value = 0
+    }
   }
 }
 
