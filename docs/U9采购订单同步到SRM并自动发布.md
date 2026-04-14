@@ -218,7 +218,7 @@ ORDER BY po.CreatedOn DESC;
 
 ## 9. SRM 已实现能力（帆软 caigou_cp）
 
-- **管理端**：采购订单列表 →「从 U9 同步采购订单（帆软）」；或调用 **`POST /api/v1/purchase-orders/sync-from-u9`**（需登录，读超时建议 10 分钟级，与物料同步一致）。
+- **管理端**：采购订单列表中，仅在当前选中采购组织为 **宁波公司**（`org_unit.code=NB` 或 `name=宁波公司` 或 `u9_org_code=1001711275375071`）时显示「从 U9 同步采购订单（帆软）」；接口仍为 **`POST /api/v1/purchase-orders/sync-from-u9`**（需登录，读超时建议 10 分钟级，与物料同步一致）。
 - **帆软请求体**：与物料共用 `srm.u9.decision-api-url`、`datasource-name`、`page_number` / `sync-page-size` 分页逻辑；报表路径默认 **`srm.u9.purchase-order-report-path: API/caigou_cp.cpt`**；**`parameters` 默认一条空对象 `[{}]`**（与现场一致）。若模板需要具名参数，可在配置中设置 `purchase-order-fine-report-parameters`（格式同 `fine-report-parameters`）。
 - **落库规则**：按 **`purchase_order.u9_doc_no` = U9 `单据编号`** 且 **`procurement_org_id`**（由行上 **`核算组织` → `org_unit.u9_org_code`** 解析）做幂等；新建单为 **已审核并自动发布**（`RELEASED` + 供应商通知）。重复同步时，若订单**已有收货**则拒绝覆盖；否则整单替换行。
 - **仓库**：当前取该采购组织下 **按编码排序的第一个仓库** 作为行仓库（与「每行非空 warehouse」约束兼容）。若报表后续增加仓库列，可再扩展映射。

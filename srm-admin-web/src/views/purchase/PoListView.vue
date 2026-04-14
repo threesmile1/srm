@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload as UploadIcon } from '@element-plus/icons-vue'
@@ -20,6 +20,19 @@ const importDialogVisible = ref(false)
 const importResult = ref<PoImportResult | null>(null)
 const importing = ref(false)
 const u9PoSyncing = ref(false)
+
+/** 仅宁波公司采购组织展示「从 U9 同步采购订单（帆软）」（与 org_unit.code / name / u9_org_code 一致即可） */
+function isNingboProcurementOrg(o: OrgUnit | null | undefined): boolean {
+  if (!o) return false
+  const code = (o.code ?? '').trim().toUpperCase()
+  const name = (o.name ?? '').trim()
+  const u9 = (o.u9OrgCode ?? '').trim()
+  return code === 'NB' || name === '宁波公司' || u9 === '1001711275375071'
+}
+
+const currentProcurementOrg = computed(() => orgs.value.find((x) => x.id === orgId.value) ?? null)
+
+const showU9FineReportPoSync = computed(() => isNingboProcurementOrg(currentProcurementOrg.value))
 
 const statusMap: Record<string, string> = {
   DRAFT: '草稿',
@@ -77,6 +90,10 @@ async function exportSelected() {
 }
 
 async function syncPurchaseOrdersFromU9() {
+  if (!showU9FineReportPoSync.value) {
+    ElMessage.warning('请先在上方选择「宁波公司」采购组织')
+    return
+  }
   u9PoSyncing.value = true
   try {
     const r = await purchaseApi.syncFromU9()
@@ -162,7 +179,13 @@ async function handleImport(uploadFile: { raw: File }) {
       </el-select>
       <el-button type="primary" @click="$router.push('/purchase/orders/new')">新建</el-button>
       <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
-      <el-button type="success" plain :loading="u9PoSyncing" @click="syncPurchaseOrdersFromU9">
+      <el-button
+        v-if="showU9FineReportPoSync"
+        type="success"
+        plain
+        :loading="u9PoSyncing"
+        @click="syncPurchaseOrdersFromU9"
+      >
         从 U9 同步采购订单（帆软）
       </el-button>
       <el-button @click="exportSelected">导出选中（U9）</el-button>
