@@ -30,6 +30,7 @@ public class AuthController {
     public static final String SESSION_USERNAME = "SRM_USERNAME";
     public static final String SESSION_ROLES = "SRM_ROLES";
     public static final String SESSION_SUPPLIER_ID = "SRM_SUPPLIER_ID";
+    public static final String SESSION_SUPPLIER_NAME = "SRM_SUPPLIER_NAME";
     public static final String SESSION_DEFAULT_ORG_ID = "SRM_DEFAULT_ORG_ID";
     public static final String SESSION_DISPLAY_NAME = "SRM_DISPLAY_NAME";
 
@@ -49,6 +50,7 @@ public class AuthController {
         session.setAttribute(SESSION_ROLES, roleCodes);
         if (user.getSupplier() != null) {
             session.setAttribute(SESSION_SUPPLIER_ID, user.getSupplier().getId());
+            session.setAttribute(SESSION_SUPPLIER_NAME, user.getSupplier().getName());
         }
         if (user.getDefaultProcurementOrg() != null) {
             session.setAttribute(SESSION_DEFAULT_ORG_ID, user.getDefaultProcurementOrg().getId());
@@ -82,8 +84,9 @@ public class AuthController {
         @SuppressWarnings("unchecked")
         Set<String> roles = (Set<String>) session.getAttribute(SESSION_ROLES);
         Long supplierId = (Long) session.getAttribute(SESSION_SUPPLIER_ID);
+        String supplierName = (String) session.getAttribute(SESSION_SUPPLIER_NAME);
         Long defaultOrgId = (Long) session.getAttribute(SESSION_DEFAULT_ORG_ID);
-        return new UserInfoResponse(userId, username, displayName, roles, defaultOrgId, supplierId);
+        return new UserInfoResponse(userId, username, displayName, roles, defaultOrgId, supplierId, supplierName);
     }
 
     @PostMapping("/change-password")
@@ -106,7 +109,7 @@ public class AuthController {
 
     public record UserInfoResponse(
             Long id, String username, String displayName,
-            Set<String> roles, Long defaultProcurementOrgId, Long supplierId
+            Set<String> roles, Long defaultProcurementOrgId, Long supplierId, String supplierName
     ) {
         static UserInfoResponse from(UserAccount u) {
             return new UserInfoResponse(
@@ -115,7 +118,8 @@ public class AuthController {
                     u.getDisplayName(),
                     u.getRoles().stream().map(Role::getCode).collect(Collectors.toSet()),
                     u.getDefaultProcurementOrg() != null ? u.getDefaultProcurementOrg().getId() : null,
-                    u.getSupplier() != null ? u.getSupplier().getId() : null
+                    u.getSupplier() != null ? u.getSupplier().getId() : null,
+                    u.getSupplier() != null ? u.getSupplier().getName() : null
             );
         }
     }

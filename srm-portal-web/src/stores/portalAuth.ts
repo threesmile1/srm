@@ -9,6 +9,7 @@ type UserInfo = {
   roles: string[]
   defaultProcurementOrgId: number | null
   supplierId: number | null
+  supplierName?: string | null
 }
 
 const STORAGE_KEY = 'srm_portal_user'
@@ -21,6 +22,7 @@ export const usePortalAuthStore = defineStore('portalAuth', () => {
   const username = computed(() => user.value?.username ?? '')
   /** 会话中的供应商主键；登录已校验非空，未登录时为 null（不再默认 1，避免前端误判） */
   const supplierId = computed(() => user.value?.supplierId ?? null)
+  const supplierName = computed(() => user.value?.supplierName ?? null)
 
   async function login(name: string, password: string) {
     const u = name.trim()
@@ -54,5 +56,5 @@ export const usePortalAuthStore = defineStore('portalAuth', () => {
     sessionStorage.removeItem(STORAGE_KEY)
   }
 
-  return { user, username, supplierId, isLoggedIn, login, logout }
+  return { user, username, supplierId, supplierName, isLoggedIn, login, logout }
 })

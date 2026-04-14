@@ -140,7 +140,7 @@ function logout() {
             </span>
             <div class="zy-user-meta">
               <span class="zy-user-name">{{ auth.username }}</span>
-              <span class="zy-user-tag">供应商编号 {{ auth.supplierId ?? '—' }}</span>
+              <span class="zy-user-tag">供应商 {{ auth.supplierName || '—' }}</span>
             </div>
           </div>
           <el-button type="primary" link class="zy-logout" @click="logout">
