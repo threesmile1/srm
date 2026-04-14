@@ -2,6 +2,7 @@ package com.srm.po.repo;
 
 import com.srm.po.domain.PoStatus;
 import com.srm.po.domain.PurchaseOrderLine;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -55,4 +56,8 @@ public interface PurchaseOrderLineRepository extends JpaRepository<PurchaseOrder
             """)
     List<PurchaseOrderLine> findReleasedWithReceiptBySupplierAndOrg(@Param("sid") Long supplierId,
                                                                    @Param("oid") Long procurementOrgId);
+
+    @Modifying
+    @Query("delete from PurchaseOrderLine l where l.purchaseOrder.id = :poId")
+    int deleteByPurchaseOrderId(@Param("poId") Long purchaseOrderId);
 }
