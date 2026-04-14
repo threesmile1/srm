@@ -21,6 +21,7 @@ import lombok.Setter;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.LocalDate;
+import java.time.Instant;
 
 @Getter
 @Setter
@@ -87,6 +88,9 @@ public class PurchaseOrder extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "export_status", nullable = false, length = 32)
     private ExportStatus exportStatus = ExportStatus.NOT_EXPORTED;
+
+    @Column(name = "released_at")
+    private Instant releasedAt;
 
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("lineNo ASC")

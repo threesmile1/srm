@@ -97,6 +97,12 @@ async function exportOrders() {
     exporting.value = false
   }
 }
+
+function formatDateTimeIso(s: string | null | undefined) {
+  if (!s) return ''
+  // expected: 2026-04-14T12:34:56Z / 2026-04-14T12:34:56.123Z
+  return s.length >= 10 ? s.slice(0, 10) : s
+}
 </script>
 
 <template>
@@ -114,6 +120,11 @@ async function exportOrders() {
       <el-table-column prop="status" label="状态" width="100" />
       <el-table-column prop="supplierName" label="供应商" />
       <el-table-column prop="officialOrderNo" label="正式订单号" width="160" show-overflow-tooltip />
+      <el-table-column label="发布日期" width="110" show-overflow-tooltip>
+        <template #default="{ row }">
+          {{ formatDateTimeIso(row.releasedAt) }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="100">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/pos/${row.id}`)">详情</el-button>

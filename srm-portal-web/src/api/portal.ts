@@ -4,6 +4,7 @@ export type PoSummary = {
   id: number
   poNo: string
   officialOrderNo: string | null
+  releasedAt: string | null
   status: string
   supplierCode: string
   supplierName: string

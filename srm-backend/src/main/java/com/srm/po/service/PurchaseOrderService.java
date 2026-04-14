@@ -313,6 +313,9 @@ public class PurchaseOrderService {
             throw new BadRequestException("仅已审核订单可发布，当前状态: " + po.getStatus());
         }
         po.setStatus(PoStatus.RELEASED);
+        if (po.getReleasedAt() == null) {
+            po.setReleasedAt(Instant.now());
+        }
         PurchaseOrder saved = purchaseOrderRepository.save(po);
         auditService.log(null, null, "RELEASE_PO", "PO", id, "poNo=" + po.getPoNo(), null);
         try {
@@ -377,6 +380,9 @@ public class PurchaseOrderService {
             throw new BadRequestException("订单已有收货记录，禁止恢复关闭状态，请联系管理员走受控流程处理。");
         }
         po.setStatus(PoStatus.RELEASED);
+        if (po.getReleasedAt() == null) {
+            po.setReleasedAt(Instant.now());
+        }
         auditService.log(null, null, "REOPEN_PO", "PO", id, "poNo=" + po.getPoNo(), null);
         return purchaseOrderRepository.save(po);
     }
