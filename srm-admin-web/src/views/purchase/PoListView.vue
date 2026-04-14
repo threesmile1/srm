@@ -202,6 +202,7 @@ async function handleImport(uploadFile: { raw: File }) {
       </el-table-column>
       <el-table-column prop="supplierCode" label="供应商" width="120" />
       <el-table-column prop="supplierName" label="供应商名称" />
+      <el-table-column prop="officialOrderNo" label="正式订单号" width="160" show-overflow-tooltip />
       <el-table-column prop="currency" label="币种" width="80" />
       <el-table-column prop="exportStatus" label="导出" width="100" />
       <el-table-column label="操作" width="100">
