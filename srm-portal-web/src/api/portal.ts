@@ -3,6 +3,7 @@ import { api } from './http'
 export type PoSummary = {
   id: number
   poNo: string
+  officialOrderNo: string | null
   status: string
   supplierCode: string
   supplierName: string
@@ -22,6 +23,7 @@ export type PoLine = {
   uom: string
   unitPrice: string
   amount: string
+  requestedDate: string | null
   warehouseCode: string
   confirmedQty: string | null
   promisedDate: string | null

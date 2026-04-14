@@ -71,6 +71,9 @@ onMounted(load)
       <el-table-column prop="materialName" label="名称" />
       <el-table-column prop="materialSpec" label="规格" width="160" show-overflow-tooltip />
       <el-table-column prop="qty" label="订购量" width="90" />
+      <el-table-column prop="unitPrice" label="单价" width="100" />
+      <el-table-column prop="amount" label="金额" width="110" />
+      <el-table-column prop="requestedDate" label="要求交货日期" width="120" />
       <el-table-column prop="receivedQty" label="已收" width="80" />
       <el-table-column prop="confirmedQty" label="确认量" width="90" />
       <el-table-column prop="promisedDate" label="承诺交期" width="110" />
