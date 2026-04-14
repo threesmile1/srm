@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.domain.Page;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -40,6 +41,16 @@ public class PurchaseOrderController {
         return purchaseOrderService.listByOrg(procurementOrgId).stream()
                 .map(PoSummaryResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/paged")
+    public Page<PoSummaryResponse> listPaged(
+            @RequestParam Long procurementOrgId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return purchaseOrderService.pageByOrg(procurementOrgId, page, size)
+                .map(PoSummaryResponse::from);
     }
 
     @GetMapping("/{id}")

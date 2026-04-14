@@ -49,6 +49,15 @@ export type PoImportResult = {
   errors: string[]
 }
 
+/** Spring Data Page JSON */
+export type SpringPage<T> = {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+}
+
 export type U9PurchaseOrderSyncResult = {
   rowCount: number
   droppedUnmappedRows: number
@@ -63,6 +72,8 @@ export type U9PurchaseOrderSyncResult = {
 export const purchaseApi = {
   list: (procurementOrgId: number) =>
     api.get<PoSummary[]>('/api/v1/purchase-orders', { params: { procurementOrgId } }),
+  listPaged: (procurementOrgId: number, page: number, size: number) =>
+    api.get<SpringPage<PoSummary>>('/api/v1/purchase-orders/paged', { params: { procurementOrgId, page, size } }),
   get: (id: number) => api.get<PoDetail>(`/api/v1/purchase-orders/${id}`),
   submit: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/submit`),
   create: (body: {

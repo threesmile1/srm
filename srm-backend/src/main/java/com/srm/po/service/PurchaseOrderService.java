@@ -25,6 +25,8 @@ import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -55,6 +57,13 @@ public class PurchaseOrderService {
     @Transactional(readOnly = true)
     public List<PurchaseOrder> listByOrg(Long procurementOrgId) {
         return purchaseOrderRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseOrder> pageByOrg(Long procurementOrgId, int page, int size) {
+        int safeSize = Math.min(Math.max(size, 1), 500);
+        int safePage = Math.max(page, 0);
+        return purchaseOrderRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId, PageRequest.of(safePage, safeSize));
     }
 
     @Transactional(readOnly = true)

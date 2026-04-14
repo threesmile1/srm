@@ -6,6 +6,8 @@ import com.srm.po.domain.PurchaseOrder;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
@@ -36,6 +38,9 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = {"supplier"})
     List<PurchaseOrder> findByProcurementOrgIdOrderByIdDesc(Long procurementOrgId);
+
+    @EntityGraph(attributePaths = {"supplier"})
+    Page<PurchaseOrder> findByProcurementOrgIdOrderByIdDesc(Long procurementOrgId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"supplier", "procurementOrg"})
     List<PurchaseOrder> findBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status);

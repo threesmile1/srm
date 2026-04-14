@@ -14,6 +14,9 @@ const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
 usePersistedProcurementOrg(orgId, orgs, 'po-list')
 const rows = ref<PoSummary[]>([])
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
 const tableRef = ref()
 
 const importDialogVisible = ref(false)
@@ -52,11 +55,17 @@ async function loadOrgs() {
 
 async function loadPos() {
   if (orgId.value == null) return
-  const r = await purchaseApi.list(orgId.value)
-  rows.value = r.data
+  const r = await purchaseApi.listPaged(orgId.value, currentPage.value - 1, pageSize.value)
+  rows.value = r.data.content
+  total.value = r.data.totalElements
 }
 
 watch(orgId, () => {
+  currentPage.value = 1
+  loadPos()
+})
+
+watch([currentPage, pageSize], () => {
   loadPos()
 })
 
@@ -211,6 +220,16 @@ async function handleImport(uploadFile: { raw: File }) {
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="pager-wrap">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100, 200]"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="total"
+      />
+    </div>
     <el-dialog v-model="importDialogVisible" title="Excel 导入采购订单" width="620px">
       <div class="import-hint">
         <p>Excel 模板列顺序：<b>采购组织编码 | 供应商编码 | 币种 | 备注 | 物料编码 | 仓库编码 | 数量 | 单价 | 交期(yyyy-MM-dd)</b></p>
@@ -257,6 +276,11 @@ async function handleImport(uploadFile: { raw: File }) {
   gap: 16px;
   margin-bottom: 16px;
   flex-wrap: wrap;
+}
+.pager-wrap {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 .title {
   font-size: 18px;
