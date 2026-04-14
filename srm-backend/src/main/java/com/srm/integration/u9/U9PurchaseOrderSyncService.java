@@ -186,12 +186,25 @@ public class U9PurchaseOrderSyncService {
             currency = "CNY";
         }
         String remark = buildRemark(first, docNo);
-        LocalDate businessDate = parseDate(first, "业务日期", "BusinessDate", "business_date");
-        String officialOrderNo = firstText(first, "正式订单号", "DescFlexField_PrivateDescSeg5");
-        String store2 = firstText(first, "二级门店", "DescFlexField_PrivateDescSeg8");
-        String receiverName = firstText(first, "收货人名称", "DescFlexField_PrivateDescSeg3");
-        String terminalPhone = firstText(first, "终端电话", "DescFlexField_PrivateDescSeg11");
-        String installAddress = firstText(first, "安装地址", "DescFlexField_PrivateDescSeg10");
+        String businessDateText = firstNonBlank(
+                firstText(first, "业务日期", "BusinessDate", "business_date"),
+                firstTextByKeyContains(first, "业务日期", "businessdate"));
+        LocalDate businessDate = parseDateText(businessDateText);
+        String officialOrderNo = firstNonBlank(
+                firstText(first, "正式订单号", "DescFlexField_PrivateDescSeg5"),
+                firstTextByKeyContains(first, "正式订单号", "订单号_正式", "official"));
+        String store2 = firstNonBlank(
+                firstText(first, "二级门店", "DescFlexField_PrivateDescSeg8"),
+                firstTextByKeyContains(first, "二级门店", "门店"));
+        String receiverName = firstNonBlank(
+                firstText(first, "收货人名称", "DescFlexField_PrivateDescSeg3"),
+                firstTextByKeyContains(first, "收货人", "收货人名称", "receiver"));
+        String terminalPhone = firstNonBlank(
+                firstText(first, "终端电话", "DescFlexField_PrivateDescSeg11"),
+                firstTextByKeyContains(first, "终端电话", "电话", "phone", "tel"));
+        String installAddress = firstNonBlank(
+                firstText(first, "安装地址", "DescFlexField_PrivateDescSeg10"),
+                firstTextByKeyContains(first, "安装地址", "地址", "address"));
 
         List<CreateLine> lines = new ArrayList<>();
         Set<String> seenLineKeys = new LinkedHashSet<>();
@@ -482,6 +495,43 @@ public class U9PurchaseOrderSyncService {
         return t.trim();
     }
 
+    private static String firstNonBlank(String... candidates) {
+        if (candidates == null) return "";
+        for (String c : candidates) {
+            if (StringUtils.hasText(c)) {
+                return c.trim();
+            }
+        }
+        return "";
+    }
+
+    /** 兼容帆软列名被加前后缀/空格/括号：只要列名包含 token 即可取值 */
+    private static String firstTextByKeyContains(JsonNode row, String... tokens) {
+        if (row == null || !row.isObject() || tokens == null || tokens.length == 0) {
+            return "";
+        }
+        Iterator<String> it = row.fieldNames();
+        while (it.hasNext()) {
+            String fn = it.next();
+            if (!StringUtils.hasText(fn)) {
+                continue;
+            }
+            String lower = fn.toLowerCase();
+            for (String t : tokens) {
+                if (!StringUtils.hasText(t)) continue;
+                String tl = t.toLowerCase();
+                if (lower.contains(tl) || fn.contains(t)) {
+                    JsonNode v = row.get(fn);
+                    String tv = textValue(v);
+                    if (StringUtils.hasText(tv)) {
+                        return tv.trim();
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
     private static String firstText(JsonNode row, String... keys) {
         for (String k : keys) {
             if (!row.has(k) || row.get(k).isNull()) {
@@ -598,6 +648,28 @@ public class U9PurchaseOrderSyncService {
                 } catch (DateTimeParseException ignored) {
                     // next
                 }
+            }
+        }
+        return null;
+    }
+
+    /** 直接解析日期字符串（支持 yyyy-MM-dd 或带时间）。 */
+    private static LocalDate parseDateText(String t) {
+        if (!StringUtils.hasText(t)) {
+            return null;
+        }
+        String s = t.trim();
+        for (DateTimeFormatter fmt : List.of(
+                DateTimeFormatter.ISO_LOCAL_DATE,
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy/MM/dd"))) {
+            try {
+                if (fmt == DateTimeFormatter.ISO_LOCAL_DATE) {
+                    return LocalDate.parse(s.length() >= 10 ? s.substring(0, 10) : s, fmt);
+                }
+                return java.time.LocalDateTime.parse(s, fmt).toLocalDate();
+            } catch (DateTimeParseException ignored) {
+                // next
             }
         }
         return null;
