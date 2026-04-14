@@ -113,7 +113,22 @@ onMounted(async () => {
       <el-button v-if="po.status === 'DRAFT' || po.status === 'APPROVED'" type="danger" plain @click="act(() => purchaseApi.cancel(po!.id), '已取消')">
         取消
       </el-button>
-      <el-button v-if="po.status === 'RELEASED'" @click="act(() => purchaseApi.close(po!.id), '已关闭')">关闭</el-button>
+      <el-button
+        v-if="po.status === 'RELEASED'"
+        :disabled="po.lines.some((l) => Number(l.qty) > Number(l.receivedQty))"
+        @click="act(() => purchaseApi.close(po!.id), '已关闭')"
+      >
+        关闭
+      </el-button>
+      <el-button
+        v-if="po.status === 'CLOSED'"
+        type="warning"
+        plain
+        :disabled="po.lines.some((l) => Number(l.receivedQty) > 0)"
+        @click="act(() => purchaseApi.reopen(po!.id), '已恢复为已发布')"
+      >
+        恢复（误点关闭）
+      </el-button>
     </div>
 
     <el-tabs v-model="tab" style="margin-top: 16px">

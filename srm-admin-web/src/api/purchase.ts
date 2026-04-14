@@ -81,6 +81,7 @@ export const purchaseApi = {
   release: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/release`),
   cancel: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/cancel`),
   close: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/close`),
+  reopen: (id: number) => api.post<PoDetail>(`/api/v1/purchase-orders/${id}/reopen`),
   importOrders: (file: File) => {
     const fd = new FormData()
     fd.append('file', file)

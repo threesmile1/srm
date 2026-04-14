@@ -319,8 +319,37 @@ public class PurchaseOrderService {
         if (po.getStatus() != PoStatus.RELEASED) {
             throw new BadRequestException("仅已发布可关闭，当前状态: " + po.getStatus());
         }
+        boolean anyOpen = po.getLines().stream().anyMatch(l -> {
+            BigDecimal qty = l.getQty() != null ? l.getQty() : BigDecimal.ZERO;
+            BigDecimal received = l.getReceivedQty() != null ? l.getReceivedQty() : BigDecimal.ZERO;
+            return qty.compareTo(received) > 0;
+        });
+        if (anyOpen) {
+            throw new BadRequestException("订单未全部收货，禁止手工关闭；请完成收货后由系统自动关闭或联系管理员处理。");
+        }
         po.setStatus(PoStatus.CLOSED);
         auditService.log(null, null, "CLOSE_PO", "PO", id, "poNo=" + po.getPoNo(), null);
+        return purchaseOrderRepository.save(po);
+    }
+
+    /**
+     * 误点关闭兜底：无收货时允许从 CLOSED 恢复到 RELEASED。
+     */
+    @Transactional
+    public PurchaseOrder reopenIfNoReceipt(Long id) {
+        PurchaseOrder po = requireDetail(id);
+        if (po.getStatus() != PoStatus.CLOSED) {
+            throw new BadRequestException("仅已关闭订单可恢复，当前状态: " + po.getStatus());
+        }
+        boolean anyReceived = po.getLines().stream().anyMatch(l -> {
+            BigDecimal received = l.getReceivedQty() != null ? l.getReceivedQty() : BigDecimal.ZERO;
+            return received.compareTo(BigDecimal.ZERO) > 0;
+        });
+        if (anyReceived) {
+            throw new BadRequestException("订单已有收货记录，禁止恢复关闭状态，请联系管理员走受控流程处理。");
+        }
+        po.setStatus(PoStatus.RELEASED);
+        auditService.log(null, null, "REOPEN_PO", "PO", id, "poNo=" + po.getPoNo(), null);
         return purchaseOrderRepository.save(po);
     }
 

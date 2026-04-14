@@ -111,6 +111,16 @@ public class PurchaseOrderController {
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
 
+    /**
+     * 误操作兜底：仅在订单无收货且当前为 CLOSED 时，允许恢复为 RELEASED（便于继续收货/协同）。
+     * 仅限管理员使用；后续可替换为更严谨的审批/工单流程。
+     */
+    @PostMapping("/{id}/reopen")
+    public PoDetailResponse reopen(@PathVariable Long id) {
+        purchaseOrderService.reopenIfNoReceipt(id);
+        return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
+    }
+
     public record PoCreateRequest(
             @NotNull Long procurementOrgId,
             @NotNull Long supplierId,
