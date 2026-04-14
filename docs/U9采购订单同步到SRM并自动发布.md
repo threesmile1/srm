@@ -117,6 +117,8 @@ U9 采购订单/采购订单行常见枚举：`UFIDA.U9.PM.PO.PODOCStatusEnum`
 >
 > - `PM_POLine` 上通常不直接存 `DeliveryDate`，而是在 **`PM_POShipLine`**（计划行）中。
 > - 你们确认规则：**取最新计划行** → 本示例用 `ORDER BY x.ID DESC`（如需更严谨，可改为 `ORDER BY x.ModifiedOn DESC, x.ID DESC`）。
+>
+> **定稿口径**：下面代码块与现场使用的 SQL 一致（含 `im.code as 物料编码`、`CBO_Supplier` / `CBO_Supplier_Trl` 取供应商名称与编码），本文档以此为准存档。
 
 ```sql
 DECLARE @FromDate DATETIME = DATEADD(DAY, -90, GETDATE());
@@ -137,15 +139,10 @@ SELECT
 
   pl.ItemInfo_ItemName                              AS [料品名称],
   im.SPECS                                          AS [料品规格],
-  im.Code                                           AS [物料编码],
+  im.code as 物料编码,
 
-  /* 供应商：优先用 PO 头上的“快照字段”，再回落到主档/多语表（避免仅 join 翻译表导致空名） */
-  COALESCE(NULLIF(LTRIM(RTRIM(po.Supplier_ShortName)), ''),
-           NULLIF(LTRIM(RTRIM(st.Name)), ''),
-           NULLIF(LTRIM(RTRIM(st.ShortName)), ''))   AS [供应商名称],
-
-  COALESCE(NULLIF(LTRIM(RTRIM(po.Supplier_Code)), ''),
-           NULLIF(LTRIM(RTRIM(s.Code)), ''))        AS [供应商编码],
+  st.Name                                           AS [供应商名称],
+  s.Code                                            AS [供应商编码],
 
   po.DocNo                                          AS [单据编号],
   po.DocumentType                                   AS [单据类型_ID],
