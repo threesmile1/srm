@@ -55,9 +55,21 @@ async function loadOrgs() {
 
 async function loadPos() {
   if (orgId.value == null) return
-  const r = await purchaseApi.listPaged(orgId.value, currentPage.value - 1, pageSize.value)
-  rows.value = r.data.content
-  total.value = r.data.totalElements
+  try {
+    const r = await purchaseApi.listPaged(orgId.value, currentPage.value - 1, pageSize.value)
+    rows.value = r.data.content
+    total.value = r.data.totalElements
+  } catch (e: unknown) {
+    // 兼容后端未重启/旧版本尚无 paged 接口的情况，避免“无数据但无提示”
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.warning(msg || '分页加载失败，已回退为全量加载（请重启后端或刷新）')
+    const r = await purchaseApi.list(orgId.value)
+    rows.value = r.data
+    total.value = r.data.length
+  }
 }
 
 watch(orgId, () => {
