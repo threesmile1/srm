@@ -16,6 +16,10 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
     boolean existsByCode(String code);
 
     @EntityGraph(attributePaths = {"authorizedProcurementOrgs"})
+    @Query("select s from Supplier s where s.code = :code")
+    Optional<Supplier> fetchWithOrgsByCode(@Param("code") String code);
+
+    @EntityGraph(attributePaths = {"authorizedProcurementOrgs"})
     @Override
     List<Supplier> findAll();
 

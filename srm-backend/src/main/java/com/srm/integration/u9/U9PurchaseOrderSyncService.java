@@ -176,7 +176,7 @@ public class U9PurchaseOrderSyncService {
         String supplierName = firstText(first,
                 "供应商名称", "supplier_name", "Supplier_Name", "SUPPLIER_NAME", "gongyingshang", "Name", "NAME");
         masterDataService.upsertSupplierMasterForU9(supplierCode, supplierName);
-        Supplier supplier = supplierRepository.findByCode(supplierCode.trim())
+        Supplier supplier = supplierRepository.fetchWithOrgsByCode(supplierCode.trim())
                 .orElseThrow(() -> new BadRequestException("供应商主档不存在: " + supplierCode));
         masterDataService.assertSupplierAuthorizedForOrg(supplier, org);
         masterDataService.assertSupplierAllowedForPurchaseOrder(supplier);
