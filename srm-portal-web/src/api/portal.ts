@@ -40,6 +40,30 @@ export type PoDetail = PoSummary & {
   lines: PoLine[]
 }
 
+export type PoExportRow = {
+  businessDate: string | null
+  officialOrderNo: string | null
+  store2: string | null
+  receiverName: string | null
+  terminalPhone: string | null
+  installAddress: string | null
+  materialName: string | null
+  materialSpec: string | null
+  materialCode: string | null
+  supplierName: string | null
+  supplierCode: string | null
+  docNo: string | null
+  docType: string | null
+  uom: string | null
+  qty: string | number | null
+  lastPrice: string | number | null
+  negotiatedPrice: string | number | null
+  initialPrice: string | number | null
+  requestedDate: string | null
+  unitPrice: string | number | null
+  amount: string | number | null
+}
+
 export type AsnLine = {
   id: number
   lineNo: number
@@ -128,6 +152,7 @@ export const portalApi = {
   getPo: (id: number) => api.get<PoDetail>(`/api/v1/portal/purchase-orders/${id}`),
   confirmLine: (lineId: number, body: { confirmedQty: number; promisedDate?: string | null; supplierRemark?: string }) =>
     api.post(`/api/v1/portal/purchase-order-lines/${lineId}/confirm`, body),
+  exportPoRows: () => api.get<PoExportRow[]>('/api/v1/portal/purchase-orders/export-rows'),
 
   listAsn: () => api.get<AsnNotice[]>('/api/v1/portal/asn-notices'),
   getAsn: (id: number) => api.get<AsnNotice>(`/api/v1/portal/asn-notices/${id}`),

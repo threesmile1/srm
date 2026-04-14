@@ -40,6 +40,9 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     @EntityGraph(attributePaths = {"supplier", "procurementOrg"})
     List<PurchaseOrder> findBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status);
 
+    @EntityGraph(attributePaths = {"lines", "lines.material", "supplier", "procurementOrg"})
+    List<PurchaseOrder> findWithLinesBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status);
+
     @EntityGraph(attributePaths = {"lines", "lines.material", "lines.warehouse", "ledger", "procurementOrg", "supplier"})
     @Query("select distinct p from PurchaseOrder p where p.procurementOrg.id = :oid and p.status in :statuses order by p.id desc")
     List<PurchaseOrder> findWithLinesForReport(@Param("oid") Long oid, @Param("statuses") Collection<PoStatus> statuses);

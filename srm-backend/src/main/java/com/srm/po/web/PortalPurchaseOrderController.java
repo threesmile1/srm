@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,6 +47,24 @@ public class PortalPurchaseOrderController {
         return purchaseOrderService.listReleasedForSupplier(sid).stream()
                 .map(PurchaseOrderController.PoSummaryResponse::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    @GetMapping("/purchase-orders/export-rows")
+    public List<PoExportRow> exportRows(
+            HttpSession session,
+            @RequestHeader(value = "X-Dev-Supplier-Id", required = false) Long headerSupplierId,
+            @RequestParam(value = "supplierId", required = false) Long querySupplierId
+    ) {
+        long sid = PortalSupplierSession.resolveSupplierId(session, headerSupplierId, querySupplierId);
+        List<PurchaseOrder> pos = purchaseOrderService.listReleasedWithLinesForSupplier(sid);
+        List<PoExportRow> out = new ArrayList<>();
+        for (PurchaseOrder po : pos) {
+            for (PurchaseOrderLine line : po.getLines()) {
+                out.add(PoExportRow.from(po, line));
+            }
+        }
+        return out;
     }
 
     @Transactional(readOnly = true)
@@ -83,4 +102,60 @@ public class PortalPurchaseOrderController {
             LocalDate promisedDate,
             String supplierRemark
     ) {}
+
+    /**
+     * 供应商门户“批量导出订单”：一行 = 一个订单行。
+     *
+     * 列名口径以门户页面导出为准（Excel/CSV）。
+     */
+    public record PoExportRow(
+            LocalDate businessDate,
+            String officialOrderNo,
+            String store2,
+            String receiverName,
+            String terminalPhone,
+            String installAddress,
+            String materialName,
+            String materialSpec,
+            String materialCode,
+            String supplierName,
+            String supplierCode,
+            String docNo,
+            String docType,
+            String uom,
+            BigDecimal qty,
+            BigDecimal lastPrice,
+            BigDecimal negotiatedPrice,
+            BigDecimal initialPrice,
+            LocalDate requestedDate,
+            BigDecimal unitPrice,
+            BigDecimal amount
+    ) {
+        static PoExportRow from(PurchaseOrder po, PurchaseOrderLine line) {
+            BigDecimal unitPrice = line.getUnitPrice();
+            return new PoExportRow(
+                    po.getU9BusinessDate(),
+                    po.getU9OfficialOrderNo(),
+                    po.getU9Store2(),
+                    po.getU9ReceiverName(),
+                    po.getU9TerminalPhone(),
+                    po.getU9InstallAddress(),
+                    line.getMaterial() != null ? line.getMaterial().getName() : null,
+                    line.getMaterial() != null ? line.getMaterial().getSpecification() : null,
+                    line.getMaterial() != null ? line.getMaterial().getCode() : null,
+                    po.getSupplier() != null ? po.getSupplier().getName() : null,
+                    po.getSupplier() != null ? po.getSupplier().getCode() : null,
+                    po.getU9DocNo() != null ? po.getU9DocNo() : po.getPoNo(),
+                    "采购订单",
+                    line.getUom(),
+                    line.getQty(),
+                    unitPrice,
+                    unitPrice,
+                    unitPrice,
+                    line.getRequestedDate(),
+                    unitPrice,
+                    line.getAmount()
+            );
+        }
+    }
 }

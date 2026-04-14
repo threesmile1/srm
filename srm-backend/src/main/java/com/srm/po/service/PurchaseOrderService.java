@@ -387,6 +387,12 @@ public class PurchaseOrderService {
         return purchaseOrderRepository.findBySupplierAndStatusOrderByIdDesc(s, PoStatus.RELEASED);
     }
 
+    @Transactional(readOnly = true)
+    public List<PurchaseOrder> listReleasedWithLinesForSupplier(Long supplierId) {
+        Supplier s = masterDataService.requireSupplier(supplierId);
+        return purchaseOrderRepository.findWithLinesBySupplierAndStatusOrderByIdDesc(s, PoStatus.RELEASED);
+    }
+
     @Transactional
     public PurchaseOrderLine confirmLine(Long supplierId, Long lineId, BigDecimal confirmedQty,
                                          LocalDate promisedDate, String supplierRemark) {
