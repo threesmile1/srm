@@ -221,10 +221,10 @@ public class PurchaseOrderService {
         po.setU9ReceiverName(receiverName);
         po.setU9TerminalPhone(terminalPhone);
         po.setU9InstallAddress(installAddress);
-        // 避免同一事务内 orphanRemoval 删除延迟导致 uk_pol_po_line 冲突：先批量删库并 flush，再重建行
-        purchaseOrderLineRepository.deleteByPurchaseOrderId(po.getId());
-        purchaseOrderLineRepository.flush();
+        // 先清空行并 flush，让 orphanRemoval 先把旧行删除，再插入新行，避免唯一键冲突/会话不一致
         po.getLines().clear();
+        purchaseOrderRepository.save(po);
+        purchaseOrderRepository.flush();
         appendCreateLines(po, lines);
         PurchaseOrder saved = purchaseOrderRepository.save(po);
         auditService.log(null, null, "UPDATE_PO_U9", "PO", saved.getId(),
