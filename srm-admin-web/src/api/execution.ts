@@ -71,6 +71,12 @@ export type GrDetail = GrSummary & {
 export type PurchaseExecutionRow = {
   poNo: string
   poStatus: string
+  businessDate: string | null
+  officialOrderNo: string | null
+  store2: string | null
+  receiverName: string | null
+  terminalPhone: string | null
+  installAddress: string | null
   lineNo: number
   materialCode: string
   materialName: string

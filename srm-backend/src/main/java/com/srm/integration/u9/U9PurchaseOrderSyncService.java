@@ -186,6 +186,12 @@ public class U9PurchaseOrderSyncService {
             currency = "CNY";
         }
         String remark = buildRemark(first, docNo);
+        LocalDate businessDate = parseDate(first, "业务日期", "BusinessDate", "business_date");
+        String officialOrderNo = firstText(first, "正式订单号", "DescFlexField_PrivateDescSeg5");
+        String store2 = firstText(first, "二级门店", "DescFlexField_PrivateDescSeg8");
+        String receiverName = firstText(first, "收货人名称", "DescFlexField_PrivateDescSeg3");
+        String terminalPhone = firstText(first, "终端电话", "DescFlexField_PrivateDescSeg11");
+        String installAddress = firstText(first, "安装地址", "DescFlexField_PrivateDescSeg10");
 
         List<CreateLine> lines = new ArrayList<>();
         Set<String> seenLineKeys = new LinkedHashSet<>();
@@ -223,7 +229,18 @@ public class U9PurchaseOrderSyncService {
         }
         boolean existed = purchaseOrderService.existsU9Document(org.getId(), docNo);
         purchaseOrderService.upsertFromU9AndRelease(
-                org.getId(), docNo, supplier.getId(), currency, remark, lines);
+                org.getId(),
+                docNo,
+                supplier.getId(),
+                currency,
+                remark,
+                businessDate,
+                officialOrderNo,
+                store2,
+                receiverName,
+                terminalPhone,
+                installAddress,
+                lines);
         return !existed;
     }
 

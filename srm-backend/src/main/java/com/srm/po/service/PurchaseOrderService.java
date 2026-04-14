@@ -121,6 +121,12 @@ public class PurchaseOrderService {
             Long supplierId,
             String currency,
             String remark,
+            LocalDate businessDate,
+            String officialOrderNo,
+            String store2,
+            String receiverName,
+            String terminalPhone,
+            String installAddress,
             List<CreateLine> lines) {
         if (!StringUtils.hasText(u9DocNo)) {
             throw new BadRequestException("U9 单据编号不能为空");
@@ -145,7 +151,8 @@ public class PurchaseOrderService {
         Optional<PurchaseOrder> existingOpt =
                 purchaseOrderRepository.findByProcurementOrg_IdAndU9DocNo(org.getId(), u9Key);
         if (existingOpt.isPresent()) {
-            return refreshU9PurchaseOrderLinesAndRelease(existingOpt.get(), supplier, currency, remark, lines);
+            return refreshU9PurchaseOrderLinesAndRelease(existingOpt.get(), supplier, currency, remark,
+                    businessDate, officialOrderNo, store2, receiverName, terminalPhone, installAddress, lines);
         }
 
         String poNo = poNumberService.nextPoNo(org);
@@ -157,6 +164,12 @@ public class PurchaseOrderService {
         po.setCurrency(currency != null && !currency.isBlank() ? currency : "CNY");
         po.setU9DocNo(u9Key);
         po.setRemark(remark);
+        po.setU9BusinessDate(businessDate);
+        po.setU9OfficialOrderNo(officialOrderNo);
+        po.setU9Store2(store2);
+        po.setU9ReceiverName(receiverName);
+        po.setU9TerminalPhone(terminalPhone);
+        po.setU9InstallAddress(installAddress);
         po.setRevisionNo(1);
         po.setStatus(PoStatus.DRAFT);
 
@@ -175,6 +188,12 @@ public class PurchaseOrderService {
             Supplier supplier,
             String currency,
             String remark,
+            LocalDate businessDate,
+            String officialOrderNo,
+            String store2,
+            String receiverName,
+            String terminalPhone,
+            String installAddress,
             List<CreateLine> lines) {
         if (po.getStatus() == PoStatus.CANCELLED || po.getStatus() == PoStatus.CLOSED) {
             throw new BadRequestException("订单已关闭或取消，不可覆盖同步: " + po.getPoNo());
@@ -196,6 +215,12 @@ public class PurchaseOrderService {
             po.setCurrency(currency.trim());
         }
         po.setRemark(remark);
+        po.setU9BusinessDate(businessDate);
+        po.setU9OfficialOrderNo(officialOrderNo);
+        po.setU9Store2(store2);
+        po.setU9ReceiverName(receiverName);
+        po.setU9TerminalPhone(terminalPhone);
+        po.setU9InstallAddress(installAddress);
         po.getLines().clear();
         appendCreateLines(po, lines);
         PurchaseOrder saved = purchaseOrderRepository.save(po);

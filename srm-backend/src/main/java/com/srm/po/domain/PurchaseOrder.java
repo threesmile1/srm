@@ -20,6 +20,7 @@ import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -58,6 +59,30 @@ public class PurchaseOrder extends BaseEntity {
     /** U9 采购订单号（PM_PurchaseOrder.DocNo），与 procurement_org_id 组合唯一，用于帆软 caigou 同步幂等 */
     @Column(name = "u9_doc_no", length = 128)
     private String u9DocNo;
+
+    /** U9 业务日期（用于采购执行报表展示） */
+    @Column(name = "u9_business_date")
+    private LocalDate u9BusinessDate;
+
+    /** 正式订单号（DescFlexField_PrivateDescSeg5） */
+    @Column(name = "u9_official_order_no", length = 128)
+    private String u9OfficialOrderNo;
+
+    /** 二级门店（DescFlexField_PrivateDescSeg8） */
+    @Column(name = "u9_store2", length = 128)
+    private String u9Store2;
+
+    /** 收货人名称（DescFlexField_PrivateDescSeg3） */
+    @Column(name = "u9_receiver_name", length = 128)
+    private String u9ReceiverName;
+
+    /** 终端电话（DescFlexField_PrivateDescSeg11） */
+    @Column(name = "u9_terminal_phone", length = 64)
+    private String u9TerminalPhone;
+
+    /** 安装地址（DescFlexField_PrivateDescSeg10） */
+    @Column(name = "u9_install_address", length = 512)
+    private String u9InstallAddress;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "export_status", nullable = false, length = 32)

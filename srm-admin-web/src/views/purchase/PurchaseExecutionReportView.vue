@@ -48,6 +48,12 @@ onMounted(async () => {
       </template>
       <el-table-column prop="poNo" label="订单号" width="160" />
       <el-table-column prop="poStatus" label="订单状态" width="100" />
+      <el-table-column prop="businessDate" label="业务日期" width="110" />
+      <el-table-column prop="officialOrderNo" label="正式订单号" width="160" show-overflow-tooltip />
+      <el-table-column prop="store2" label="二级门店" width="120" show-overflow-tooltip />
+      <el-table-column prop="receiverName" label="收货人" width="110" show-overflow-tooltip />
+      <el-table-column prop="terminalPhone" label="终端电话" width="120" show-overflow-tooltip />
+      <el-table-column prop="installAddress" label="安装地址" width="220" show-overflow-tooltip />
       <el-table-column prop="lineNo" label="行" width="50" />
       <el-table-column prop="materialCode" label="物料" width="120" />
       <el-table-column prop="materialName" label="名称" />
