@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload as UploadIcon } from '@element-plus/icons-vue'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
 import { purchaseApi, type PoSummary, type PoImportResult } from '../../api/purchase'
@@ -81,12 +81,46 @@ async function syncPurchaseOrdersFromU9() {
   try {
     const r = await purchaseApi.syncFromU9()
     const errN = r.data.errors?.length ?? 0
-    if (errN === 0) {
+    const dropped = r.data.droppedUnmappedRows ?? 0
+    if (errN === 0 && dropped === 0) {
       ElMessage.success(
         `U9 采购订单同步完成：新建 ${r.data.ordersCreated}，更新 ${r.data.ordersUpdated}，帆软行 ${r.data.rowCount}`,
       )
     } else {
-      ElMessage.warning(`同步结束：新建 ${r.data.ordersCreated}，更新 ${r.data.ordersUpdated}，失败/跳过 ${errN} 条`)
+      const parts: string[] = []
+      parts.push(`新建 ${r.data.ordersCreated}，更新 ${r.data.ordersUpdated}`)
+      parts.push(`帆软行 ${r.data.rowCount}，归组 ${r.data.groupsTotal ?? '—'}`)
+      if (dropped > 0) {
+        parts.push(`未归组 ${dropped} 行（缺单据编号或核算组织列）`)
+      }
+      if (errN > 0) {
+        parts.push(`失败/跳过 ${errN} 单`)
+      }
+      ElMessage.warning(parts.join('；'))
+      const counts = r.data.errorReasonCounts ?? {}
+      const countLines = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 12)
+        .map(([k, v]) => `${v}× ${k}`)
+      const samples = (r.data.errors ?? []).slice(0, 25).join('\n')
+      const detailBlocks: string[] = []
+      if (dropped > 0) {
+        detailBlocks.push(
+          `有 ${dropped} 行帆软数据未参与归组：缺少「单据编号」或「核算组织」列值，或列名与模板不一致（后端已支持列名大小写不敏感）。`,
+        )
+      }
+      if (countLines.length) {
+        detailBlocks.push('【原因聚合】\n' + countLines.join('\n'))
+      }
+      if (errN > 0) {
+        detailBlocks.push('【样例明细（前 25 条）】\n' + (samples || '（无）'))
+      }
+      if (detailBlocks.length) {
+        await ElMessageBox.alert(detailBlocks.join('\n\n'), 'U9 采购订单同步结果', {
+          confirmButtonText: '关闭',
+          customClass: 'u9-po-sync-detail-box',
+        })
+      }
     }
     await loadPos()
   } catch (e: unknown) {
@@ -220,5 +254,19 @@ async function handleImport(uploadFile: { raw: File }) {
   padding-left: 20px;
   font-size: 13px;
   color: var(--el-color-danger);
+}
+</style>
+
+<style>
+.u9-po-sync-detail-box {
+  max-width: 720px;
+}
+.u9-po-sync-detail-box .el-message-box__message {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 460px;
+  overflow-y: auto;
+  text-align: left;
 }
 </style>

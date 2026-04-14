@@ -3,6 +3,7 @@ package com.srm.integration.u9;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.srm.config.SrmProperties;
 import com.srm.foundation.domain.OrgUnit;
 import com.srm.foundation.domain.OrgUnitType;
@@ -14,7 +15,6 @@ import com.srm.master.domain.Supplier;
 import com.srm.master.repo.MaterialItemRepository;
 import com.srm.master.repo.SupplierRepository;
 import com.srm.master.service.MasterDataService;
-import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.service.PurchaseOrderService;
 import com.srm.po.service.PurchaseOrderService.CreateLine;
 import com.srm.web.error.BadRequestException;
@@ -29,9 +29,11 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,10 +58,15 @@ public class U9PurchaseOrderSyncService {
 
     public record U9PurchaseOrderSyncResult(
             int rowCount,
+            /** 无法归组（缺少单据编号或核算组织列）的帆软行数 */
+            int droppedUnmappedRows,
+            int groupsTotal,
             int ordersCreated,
             int ordersUpdated,
             int skipped,
-            List<String> errors) {}
+            List<String> errors,
+            /** 按异常信息前缀聚合（便于一眼看出共因，如「物料不存在」） */
+            Map<String, Integer> errorReasonCounts) {}
 
     public U9PurchaseOrderSyncResult fetchAndApply() {
         SrmProperties.U9 u9 = properties.getU9();
@@ -71,13 +78,15 @@ public class U9PurchaseOrderSyncService {
         }
         List<JsonNode> rows = fetchAllPages(u9);
         if (rows.isEmpty()) {
-            return new U9PurchaseOrderSyncResult(0, 0, 0, 0, List.of());
+            return new U9PurchaseOrderSyncResult(0, 0, 0, 0, 0, 0, List.of(), Map.of());
         }
         Map<String, List<JsonNode>> byDoc = new LinkedHashMap<>();
+        int droppedUnmappedRows = 0;
         for (JsonNode row : rows) {
             String docNo = normalizeDocNo(row);
             String orgKey = normalizeAccountOrg(row);
             if (!StringUtils.hasText(docNo) || !StringUtils.hasText(orgKey)) {
+                droppedUnmappedRows++;
                 continue;
             }
             String g = orgKey + "\t" + docNo;
@@ -87,6 +96,7 @@ public class U9PurchaseOrderSyncService {
         int updated = 0;
         int skipped = 0;
         List<String> errors = new ArrayList<>();
+        Map<String, Integer> reasonCounts = new LinkedHashMap<>();
         for (Map.Entry<String, List<JsonNode>> e : byDoc.entrySet()) {
             String[] parts = e.getKey().split("\t", 2);
             String accountOrg = parts[0];
@@ -104,12 +114,53 @@ public class U9PurchaseOrderSyncService {
                 skipped++;
                 String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
                 errors.add("U9 " + docNo + "（组织 " + accountOrg + "）：" + msg);
+                String reasonKey = summarizeReason(msg);
+                reasonCounts.merge(reasonKey, 1, Integer::sum);
                 log.warn("U9 PO 同步失败 docNo={} org={}", docNo, accountOrg, ex);
             }
         }
-        log.info("U9 采购订单同步完成：rows={} groups={} created={} updated={} skipped={}",
-                rows.size(), byDoc.size(), created, updated, skipped);
-        return new U9PurchaseOrderSyncResult(rows.size(), created, updated, skipped, errors);
+        log.info("U9 采购订单同步完成：rows={} groups={} created={} updated={} skipped={} errorReasonCounts={}",
+                rows.size(), byDoc.size(), created, updated, skipped, reasonCounts);
+        return new U9PurchaseOrderSyncResult(
+                rows.size(), droppedUnmappedRows, byDoc.size(), created, updated, skipped, errors, reasonCounts);
+    }
+
+    /** 从单条异常信息提炼共因（用于聚合展示） */
+    private static String summarizeReason(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return "(无信息)";
+        }
+        if (msg.contains("物料不存在")) {
+            return "物料不存在（请先做 U9 物料同步）";
+        }
+        if (msg.contains("未找到采购组织")) {
+            return "未匹配 org_unit.u9_org_code（核算组织）";
+        }
+        if (msg.contains("供应商未授权")) {
+            return "供应商未授权当前采购组织";
+        }
+        if (msg.contains("供应商状态")) {
+            return "供应商生命周期不允许下单";
+        }
+        if (msg.contains("缺少字段")) {
+            return "帆软列名与系统预期不一致（缺少字段）";
+        }
+        if (msg.contains("缺少或无效数值")) {
+            return "数量/单价等数值列缺失或无法解析";
+        }
+        if (msg.contains("无有效订单行")) {
+            return "无有效订单行（去重后为空或行被跳过）";
+        }
+        if (msg.contains("无仓库")) {
+            return "采购组织下无仓库";
+        }
+        if (msg.contains("已有收货")) {
+            return "订单已有收货禁止覆盖";
+        }
+        if (msg.length() > 120) {
+            return msg.substring(0, 120) + "…";
+        }
+        return msg;
     }
 
     /** @return true if newly inserted, false if updated existing */
@@ -120,8 +171,10 @@ public class U9PurchaseOrderSyncService {
                         "未找到采购组织：请在 org_unit.u9_org_code 配置核算组织 " + accountOrgStr));
         Warehouse wh = pickDefaultWarehouse(org);
         JsonNode first = docRows.get(0);
-        String supplierCode = requireText(first, "供应商编码", "supplier_code", "Supplier_Code", "gysbm");
-        String supplierName = firstText(first, "供应商名称", "supplier_name", "Supplier_Name", "gongyingshang");
+        String supplierCode = requireText(first,
+                "供应商编码", "supplier_code", "Supplier_Code", "SUPPLIER_CODE", "gysbm", "GYSBM", "供应商代码");
+        String supplierName = firstText(first,
+                "供应商名称", "supplier_name", "Supplier_Name", "SUPPLIER_NAME", "gongyingshang", "Name", "NAME");
         masterDataService.upsertSupplierMasterForU9(supplierCode, supplierName);
         Supplier supplier = supplierRepository.findByCode(supplierCode.trim())
                 .orElseThrow(() -> new BadRequestException("供应商主档不存在: " + supplierCode));
@@ -137,8 +190,10 @@ public class U9PurchaseOrderSyncService {
         List<CreateLine> lines = new ArrayList<>();
         Set<String> seenLineKeys = new LinkedHashSet<>();
         for (JsonNode row : docRows) {
-            String matCode = requireText(row, "物料编码", "料品编码", "ItemCode", "item_code", "code", "liaohao");
-            String lineDedup = firstText(row, "POLine_ID", "poline_id", "PO_Line_ID");
+            String matCode = requireText(row,
+                    "物料编码", "料品编码", "ItemCode", "item_code", "ITEMCODE", "Item_Code",
+                    "liaohao", "料号", "wlh", "物料代码");
+            String lineDedup = firstText(row, "POLine_ID", "poline_id", "PO_Line_ID", "POLINE_ID");
             if (!StringUtils.hasText(lineDedup)) {
                 lineDedup = matCode + "#" + lineNoFromRow(row);
             }
@@ -281,65 +336,108 @@ public class U9PurchaseOrderSyncService {
             JsonNode data = root.get("data");
             if (data != null && data.isObject()) {
                 JsonNode rows = data.get("rows");
-                if (rows != null && rows.isArray() && !rows.isEmpty() && rows.get(0).isObject()) {
-                    List<JsonNode> out = new ArrayList<>();
-                    for (JsonNode n : rows) {
-                        if (n.isObject()) {
-                            out.add(n);
+                if (rows != null && rows.isArray() && !rows.isEmpty()) {
+                    if (rows.get(0).isObject()) {
+                        List<JsonNode> out = new ArrayList<>();
+                        for (JsonNode n : rows) {
+                            if (n.isObject()) {
+                                out.add(n);
+                            }
+                        }
+                        return out;
+                    }
+                    if (rows.get(0).isArray()) {
+                        List<JsonNode> grid = tryConvertColumnsRowsGrid(data.get("columns"), rows);
+                        if (!grid.isEmpty()) {
+                            return grid;
                         }
                     }
-                    return out;
                 }
             }
-            throw new BadRequestException("采购订单帆软响应中未找到对象行数组");
+            throw new BadRequestException("采购订单帆软响应中未找到对象行数组（也不支持解析 columns+rows 网格）");
         } catch (JsonProcessingException e) {
             throw new BadRequestException("解析采购订单 JSON 失败: " + e.getOriginalMessage());
         }
     }
 
+    /**
+     * 帆软 data.rows 为二维数组时，按 columns 或首行表头转成对象行（与物料同步逻辑一致）。
+     */
+    private List<JsonNode> tryConvertColumnsRowsGrid(JsonNode columnsNode, JsonNode rowsNode) {
+        if (rowsNode == null || !rowsNode.isArray() || rowsNode.isEmpty() || !rowsNode.get(0).isArray()) {
+            return List.of();
+        }
+        List<String> colNames = new ArrayList<>();
+        int dataStart = 0;
+        if (columnsNode != null && columnsNode.isArray() && !columnsNode.isEmpty()) {
+            columnsNode.forEach(c -> colNames.add(textValue(c).trim()));
+        } else {
+            JsonNode header = rowsNode.get(0);
+            for (JsonNode h : header) {
+                colNames.add(textValue(h).trim());
+            }
+            dataStart = 1;
+        }
+        List<JsonNode> out = new ArrayList<>();
+        for (int r = dataStart; r < rowsNode.size(); r++) {
+            JsonNode row = rowsNode.get(r);
+            if (!row.isArray()) {
+                continue;
+            }
+            ObjectNode obj = MAPPER.createObjectNode();
+            for (int i = 0; i < colNames.size() && i < row.size(); i++) {
+                String cn = colNames.get(i);
+                if (!StringUtils.hasText(cn)) {
+                    continue;
+                }
+                JsonNode cell = row.get(i);
+                if (cell == null || cell.isNull()) {
+                    continue;
+                }
+                if (cell.isNumber()) {
+                    if (cell.isIntegralNumber()) {
+                        obj.put(cn, cell.longValue());
+                    } else {
+                        obj.put(cn, cell.decimalValue());
+                    }
+                } else if (cell.isTextual()) {
+                    obj.put(cn, cell.asText());
+                } else if (cell.isBoolean()) {
+                    obj.put(cn, cell.booleanValue());
+                } else {
+                    obj.set(cn, cell);
+                }
+            }
+            out.add(obj);
+        }
+        return out;
+    }
+
     private static String normalizeDocNo(JsonNode row) {
-        return firstText(row, "单据编号", "DocNo", "doc_no", "PO_DOC_NO", "采购订单号");
+        return firstText(row,
+                "单据编号", "DocNo", "doc_no", "DOCNO", "PO_DOC_NO", "采购订单号", "采购单号", "订单编号", "PO_NO", "pono");
     }
 
     private static String normalizeAccountOrg(JsonNode row) {
-        for (String k : List.of("核算组织", "AccountOrg", "account_org", "Account_Org")) {
-            if (!row.has(k) || row.get(k).isNull()) {
-                continue;
-            }
-            JsonNode v = row.get(k);
-            if (v.isNumber()) {
-                if (v.isIntegralNumber()) {
-                    return String.valueOf(v.asLong());
-                }
-                return v.decimalValue().toPlainString();
-            }
-            String t = v.asText();
-            if (StringUtils.hasText(t)) {
-                return t.trim();
+        for (String k : List.of("核算组织", "AccountOrg", "account_org", "Account_Org", "ACCOUNTORG")) {
+            String raw = firstText(row, k);
+            if (StringUtils.hasText(raw)) {
+                return raw.trim();
             }
         }
         return "";
     }
 
     private static int lineNoFromRow(JsonNode row) {
-        for (String k : List.of("行号", "DocLineNo", "line_no", "LineNo")) {
-            if (!row.has(k) || row.get(k).isNull()) {
+        for (String k : List.of("行号", "DocLineNo", "line_no", "LineNo", "lineno", "LINE_NO")) {
+            String t = firstText(row, k);
+            if (!StringUtils.hasText(t)) {
                 continue;
             }
-            JsonNode v = row.get(k);
             try {
-                if (v.isIntegralNumber()) {
-                    return v.asInt();
-                }
-                if (v.isNumber()) {
-                    return v.decimalValue().setScale(0, RoundingMode.DOWN).intValue();
-                }
-                String t = v.asText().trim();
-                if (StringUtils.hasText(t)) {
-                    return new BigDecimal(t).setScale(0, RoundingMode.DOWN).intValue();
-                }
+                return new BigDecimal(t.trim()).setScale(0, RoundingMode.DOWN).intValue();
             } catch (Exception ignored) {
-                // fall through
+                // next key
             }
         }
         return Integer.MAX_VALUE;
@@ -370,6 +468,22 @@ public class U9PurchaseOrderSyncService {
             String t = textValue(v);
             if (StringUtils.hasText(t)) {
                 return t.trim();
+            }
+        }
+        for (String k : keys) {
+            String want = k.trim().toLowerCase(Locale.ROOT);
+            Iterator<String> it = row.fieldNames();
+            while (it.hasNext()) {
+                String fn = it.next();
+                if (fn != null && fn.trim().toLowerCase(Locale.ROOT).equals(want)) {
+                    JsonNode v = row.get(fn);
+                    if (v != null && !v.isNull()) {
+                        String t = textValue(v);
+                        if (StringUtils.hasText(t)) {
+                            return t.trim();
+                        }
+                    }
+                }
             }
         }
         return "";
@@ -409,18 +523,12 @@ public class U9PurchaseOrderSyncService {
 
     private static BigDecimal requireDecimal(JsonNode row, String... keys) {
         for (String k : keys) {
-            if (!row.has(k) || row.get(k).isNull()) {
+            String t = firstText(row, k);
+            if (!StringUtils.hasText(t)) {
                 continue;
             }
-            JsonNode v = row.get(k);
             try {
-                if (v.isNumber()) {
-                    return v.decimalValue();
-                }
-                String t = v.asText().trim();
-                if (StringUtils.hasText(t)) {
-                    return new BigDecimal(t);
-                }
+                return new BigDecimal(t.trim());
             } catch (Exception ignored) {
                 // try next key
             }
@@ -430,18 +538,12 @@ public class U9PurchaseOrderSyncService {
 
     private static BigDecimal optionalDecimal(JsonNode row, String... keys) {
         for (String k : keys) {
-            if (!row.has(k) || row.get(k).isNull()) {
+            String t = firstText(row, k);
+            if (!StringUtils.hasText(t)) {
                 continue;
             }
-            JsonNode v = row.get(k);
             try {
-                if (v.isNumber()) {
-                    return v.decimalValue();
-                }
-                String t = v.asText().trim();
-                if (StringUtils.hasText(t)) {
-                    return new BigDecimal(t);
-                }
+                return new BigDecimal(t.trim());
             } catch (Exception ignored) {
                 // next key
             }
@@ -451,17 +553,13 @@ public class U9PurchaseOrderSyncService {
 
     private static LocalDate parseDate(JsonNode row, String... keys) {
         for (String k : keys) {
-            if (!row.has(k) || row.get(k).isNull()) {
-                continue;
-            }
-            JsonNode v = row.get(k);
-            if (v.isNumber() && v.isIntegralNumber()) {
-                long ms = v.asLong();
+            if (row.has(k) && row.get(k).isNumber() && row.get(k).isIntegralNumber()) {
+                long ms = row.get(k).asLong();
                 if (ms > 1_000_000_000_000L) {
                     return java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalDate();
                 }
             }
-            String t = textValue(v).trim();
+            String t = firstText(row, k);
             if (!StringUtils.hasText(t)) {
                 continue;
             }

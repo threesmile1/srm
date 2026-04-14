@@ -48,10 +48,13 @@ export type PoImportResult = {
 
 export type U9PurchaseOrderSyncResult = {
   rowCount: number
+  droppedUnmappedRows: number
+  groupsTotal: number
   ordersCreated: number
   ordersUpdated: number
   skipped: number
   errors: string[]
+  errorReasonCounts: Record<string, number>
 }
 
 export const purchaseApi = {
