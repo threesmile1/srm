@@ -32,6 +32,8 @@ export type Material = {
   u9WarehouseChengdu: string | null
   u9WarehouseHuanan: string | null
   u9WarehouseShuiqi: string | null
+  /** 宁波公司默认存储仓库（帆软 cangku_yigui：cangku_ningbo） */
+  u9WarehouseNingbo: string | null
   u9SupplierCode: string | null
   u9SupplierName: string | null
 }

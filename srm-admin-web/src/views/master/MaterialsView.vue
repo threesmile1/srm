@@ -272,6 +272,7 @@ onMounted(load)
       <el-table-column prop="u9WarehouseChengdu" label="成都仓" width="100" show-overflow-tooltip />
       <el-table-column prop="u9WarehouseHuanan" label="华南仓" width="100" show-overflow-tooltip />
       <el-table-column prop="u9WarehouseShuiqi" label="水漆仓" width="100" show-overflow-tooltip />
+      <el-table-column prop="u9WarehouseNingbo" label="宁波仓" width="100" show-overflow-tooltip />
       <el-table-column prop="u9SupplierName" label="供应商" min-width="120" show-overflow-tooltip />
       <el-table-column prop="u9SupplierCode" label="供应商编码" width="110" show-overflow-tooltip />
       <el-table-column prop="u9ItemCode" label="U9 料号" width="110" />
