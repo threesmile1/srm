@@ -56,5 +56,12 @@ export const usePortalAuthStore = defineStore('portalAuth', () => {
     sessionStorage.removeItem(STORAGE_KEY)
   }
 
-  return { user, username, supplierId, supplierName, isLoggedIn, login, logout }
+  async function refreshMe() {
+    if (!user.value) return
+    const res = await api.get<UserInfo>('/api/v1/auth/me')
+    user.value = { ...user.value, ...res.data }
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user.value))
+  }
+
+  return { user, username, supplierId, supplierName, isLoggedIn, login, logout, refreshMe }
 })

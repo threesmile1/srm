@@ -13,9 +13,17 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 
 async function loadPos() {
-  const r = await portalApi.listPosPaged(currentPage.value - 1, pageSize.value)
-  rows.value = r.data.content
-  total.value = r.data.totalElements
+  try {
+    const r = await portalApi.listPosPaged(currentPage.value - 1, pageSize.value)
+    rows.value = r.data.content
+    total.value = r.data.totalElements
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e ? (e as { response?: { data?: { error?: string } } }).response?.data?.error : ''
+    ElMessage.error(msg || '加载失败，请刷新或重新登录')
+    rows.value = []
+    total.value = 0
+  }
 }
 
 onMounted(loadPos)

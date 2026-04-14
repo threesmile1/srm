@@ -17,6 +17,9 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     @EntityGraph(attributePaths = {"roles", "defaultProcurementOrg"})
     List<UserAccount> findAllByOrderByUsernameAsc();
 
+    @EntityGraph(attributePaths = {"supplier"})
+    Optional<UserAccount> findWithSupplierById(Long id);
+
     boolean existsByUsername(String username);
 
     @Query("select distinct u from UserAccount u join u.roles r where r.code = :roleCode "

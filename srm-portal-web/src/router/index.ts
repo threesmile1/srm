@@ -45,7 +45,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = usePortalAuthStore()
   if (to.meta.public) {
     if (to.name === 'portal-login' && auth.isLoggedIn) {
@@ -54,6 +54,13 @@ router.beforeEach((to) => {
     return true
   }
   if (!auth.isLoggedIn) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  // 尝试刷新会话信息（补齐 supplierName；若会话已失效，触发跳转登录）
+  try {
+    await auth.refreshMe()
+  } catch {
+    await auth.logout()
     return { path: '/login', query: { redirect: to.fullPath } }
   }
   return true

@@ -2,6 +2,7 @@ package com.srm.foundation.web;
 
 import com.srm.foundation.domain.Role;
 import com.srm.foundation.domain.UserAccount;
+import com.srm.foundation.repo.UserAccountRepository;
 import com.srm.foundation.service.AuditService;
 import com.srm.foundation.service.AuthService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,6 +37,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final AuditService auditService;
+    private final UserAccountRepository userAccountRepository;
 
     @PostMapping("/login")
     public UserInfoResponse login(@Valid @RequestBody LoginRequest req, HttpServletRequest httpReq) {
@@ -85,6 +87,15 @@ public class AuthController {
         Set<String> roles = (Set<String>) session.getAttribute(SESSION_ROLES);
         Long supplierId = (Long) session.getAttribute(SESSION_SUPPLIER_ID);
         String supplierName = (String) session.getAttribute(SESSION_SUPPLIER_NAME);
+        if (supplierId != null && (supplierName == null || supplierName.isBlank())) {
+            supplierName = userAccountRepository.findWithSupplierById(userId)
+                    .map(UserAccount::getSupplier)
+                    .map(s -> s != null ? s.getName() : null)
+                    .orElse(null);
+            if (supplierName != null && !supplierName.isBlank()) {
+                session.setAttribute(SESSION_SUPPLIER_NAME, supplierName);
+            }
+        }
         Long defaultOrgId = (Long) session.getAttribute(SESSION_DEFAULT_ORG_ID);
         return new UserInfoResponse(userId, username, displayName, roles, defaultOrgId, supplierId, supplierName);
     }
