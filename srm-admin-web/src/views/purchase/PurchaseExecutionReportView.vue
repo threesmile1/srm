@@ -9,6 +9,9 @@ const orgs = ref<OrgUnit[]>([])
 const orgId = ref<number | null>(null)
 usePersistedProcurementOrg(orgId, orgs, 'report-execution')
 const rows = ref<PurchaseExecutionRow[]>([])
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
 
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
@@ -19,11 +22,17 @@ async function loadOrgs() {
 
 async function loadReport() {
   if (orgId.value == null) return
-  const r = await executionApi.purchaseExecutionReport(orgId.value)
-  rows.value = r.data
+  const r = await executionApi.purchaseExecutionReportPaged(orgId.value, currentPage.value - 1, pageSize.value)
+  rows.value = r.data.content
+  total.value = r.data.totalElements
 }
 
 watch(orgId, () => {
+  currentPage.value = 1
+  loadReport()
+})
+
+watch([currentPage, pageSize], () => {
   loadReport()
 })
 
@@ -61,6 +70,16 @@ onMounted(async () => {
       <el-table-column prop="receivedQty" label="已收" width="90" />
       <el-table-column prop="openQty" label="未清" width="90" />
     </el-table>
+
+    <div class="pager-wrap">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100, 200]"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="total"
+      />
+    </div>
   </div>
 </template>
 
@@ -83,5 +102,10 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   margin: 0 0 12px;
+}
+.pager-wrap {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

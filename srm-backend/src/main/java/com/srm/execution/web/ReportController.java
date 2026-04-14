@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import org.springframework.data.domain.Page;
 
 @Tag(name = "Reports", description = "A8 报表")
 @RestController
@@ -22,6 +23,15 @@ public class ReportController {
     @GetMapping("/purchase-execution")
     public List<ReportService.PurchaseExecutionRow> purchaseExecution(@RequestParam Long procurementOrgId) {
         return reportService.purchaseExecution(procurementOrgId);
+    }
+
+    @GetMapping("/purchase-execution/paged")
+    public Page<ReportService.PurchaseExecutionRow> purchaseExecutionPaged(
+            @RequestParam Long procurementOrgId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return reportService.purchaseExecutionPaged(procurementOrgId, page, size);
     }
 
     @GetMapping("/analytics/purchase-amount-trend")

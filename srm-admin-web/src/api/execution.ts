@@ -85,6 +85,15 @@ export type PurchaseExecutionRow = {
   openQty: string
 }
 
+/** Spring Data Page JSON */
+export type SpringPage<T> = {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+}
+
 export type ReportMonthAmount = {
   month: string
   amount: number
@@ -159,6 +168,11 @@ export const executionApi = {
 
   purchaseExecutionReport: (procurementOrgId: number) =>
     api.get<PurchaseExecutionRow[]>('/api/v1/reports/purchase-execution', { params: { procurementOrgId } }),
+
+  purchaseExecutionReportPaged: (procurementOrgId: number, page: number, size: number) =>
+    api.get<SpringPage<PurchaseExecutionRow>>('/api/v1/reports/purchase-execution/paged', {
+      params: { procurementOrgId, page, size },
+    }),
 
   purchaseAmountTrend: (procurementOrgId: number, months = 12) =>
     api.get<ReportMonthAmount[]>('/api/v1/reports/analytics/purchase-amount-trend', {

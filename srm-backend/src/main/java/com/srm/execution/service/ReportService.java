@@ -7,11 +7,14 @@ import com.srm.po.repo.PurchaseOrderRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -77,6 +80,84 @@ public class ReportService {
             BigDecimal receivedQty,
             BigDecimal openQty
     ) {}
+
+    @Transactional(readOnly = true)
+    public Page<PurchaseExecutionRow> purchaseExecutionPaged(Long procurementOrgId, int page, int size) {
+        int p = Math.max(0, page);
+        int s = Math.min(Math.max(size, 10), 200);
+        int offset = p * s;
+
+        Object totalObj = entityManager.createNativeQuery("""
+                        select count(*)
+                        from purchase_order_line pol
+                        join purchase_order po on po.id = pol.purchase_order_id
+                        where po.procurement_org_id = :oid
+                          and po.status in ('RELEASED','CLOSED')
+                        """)
+                .setParameter("oid", procurementOrgId)
+                .getSingleResult();
+        long total = toLong(totalObj);
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> raw = entityManager.createNativeQuery("""
+                        select
+                            po.po_no,
+                            po.status,
+                            po.u9_business_date,
+                            po.u9_official_order_no,
+                            po.u9_store2,
+                            po.u9_receiver_name,
+                            po.u9_terminal_phone,
+                            po.u9_install_address,
+                            pol.line_no,
+                            m.code,
+                            m.name,
+                            pol.qty,
+                            pol.received_qty,
+                            case when pol.qty > pol.received_qty then pol.qty - pol.received_qty else 0 end as open_qty
+                        from purchase_order_line pol
+                        join purchase_order po on po.id = pol.purchase_order_id
+                        join material_item m on m.id = pol.material_id
+                        where po.procurement_org_id = :oid
+                          and po.status in ('RELEASED','CLOSED')
+                        order by po.id desc, pol.line_no asc
+                        limit :lim offset :off
+                        """)
+                .setParameter("oid", procurementOrgId)
+                .setParameter("lim", s)
+                .setParameter("off", offset)
+                .getResultList();
+
+        List<PurchaseExecutionRow> rows = new ArrayList<>();
+        for (Object[] r : raw) {
+            rows.add(new PurchaseExecutionRow(
+                    (String) r[0],
+                    (String) r[1],
+                    r[2] != null ? r[2].toString() : null,
+                    (String) r[3],
+                    (String) r[4],
+                    (String) r[5],
+                    (String) r[6],
+                    (String) r[7],
+                    ((Number) r[8]).intValue(),
+                    (String) r[9],
+                    (String) r[10],
+                    toBd(r[11]),
+                    toBd(r[12]),
+                    toBd(r[13])
+            ));
+        }
+        return new PageImpl<>(rows, org.springframework.data.domain.PageRequest.of(p, s), total);
+    }
+
+    private static long toLong(Object o) {
+        if (o == null) return 0L;
+        if (o instanceof Long l) return l;
+        if (o instanceof Integer i) return i.longValue();
+        if (o instanceof BigInteger bi) return bi.longValue();
+        if (o instanceof Number n) return n.longValue();
+        return Long.parseLong(o.toString());
+    }
 
     @Transactional(readOnly = true)
     public List<MonthAmountRow> purchaseAmountTrend(Long procurementOrgId, int months) {
