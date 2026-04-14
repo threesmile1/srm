@@ -53,7 +53,7 @@ public class PurchaseOrderController {
                 .map(PoSummaryResponse::from);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public PoDetailResponse get(@PathVariable Long id) {
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
@@ -92,31 +92,31 @@ public class PurchaseOrderController {
         return u9PurchaseOrderSyncService.fetchAndApply();
     }
 
-    @PostMapping("/{id}/submit")
+    @PostMapping("/{id:\\d+}/submit")
     public PoDetailResponse submit(@PathVariable Long id) {
         purchaseOrderService.submitForApproval(id);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
 
-    @PostMapping("/{id}/approve")
+    @PostMapping("/{id:\\d+}/approve")
     public PoDetailResponse approve(@PathVariable Long id) {
         purchaseOrderService.approve(id);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
 
-    @PostMapping("/{id}/release")
+    @PostMapping("/{id:\\d+}/release")
     public PoDetailResponse release(@PathVariable Long id) {
         purchaseOrderService.release(id);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
 
-    @PostMapping("/{id}/cancel")
+    @PostMapping("/{id:\\d+}/cancel")
     public PoDetailResponse cancel(@PathVariable Long id) {
         purchaseOrderService.cancel(id);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
     }
 
-    @PostMapping("/{id}/close")
+    @PostMapping("/{id:\\d+}/close")
     public PoDetailResponse close(@PathVariable Long id) {
         purchaseOrderService.close(id);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
@@ -126,7 +126,7 @@ public class PurchaseOrderController {
      * 误操作兜底：仅在订单无收货且当前为 CLOSED 时，允许恢复为 RELEASED（便于继续收货/协同）。
      * 仅限管理员使用；后续可替换为更严谨的审批/工单流程。
      */
-    @PostMapping("/{id}/reopen")
+    @PostMapping("/{id:\\d+}/reopen")
     public PoDetailResponse reopen(@PathVariable Long id) {
         purchaseOrderService.reopenIfNoReceipt(id);
         return PoDetailResponse.from(purchaseOrderService.requireDetail(id));
