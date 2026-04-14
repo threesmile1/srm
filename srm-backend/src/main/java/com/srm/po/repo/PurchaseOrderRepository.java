@@ -45,6 +45,9 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     @EntityGraph(attributePaths = {"supplier", "procurementOrg"})
     List<PurchaseOrder> findBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status);
 
+    @EntityGraph(attributePaths = {"supplier", "procurementOrg"})
+    Page<PurchaseOrder> findBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status, Pageable pageable);
+
     @EntityGraph(attributePaths = {"lines", "lines.material", "supplier", "procurementOrg"})
     List<PurchaseOrder> findWithLinesBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status);
 

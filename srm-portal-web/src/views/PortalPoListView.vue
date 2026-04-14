@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { portalApi, type PoExportRow, type PoSummary } from '../api/portal'
@@ -8,10 +8,20 @@ import DataTableEmpty from '../components/DataTableEmpty.vue'
 const router = useRouter()
 const rows = ref<PoSummary[]>([])
 const exporting = ref(false)
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
 
-onMounted(async () => {
-  const r = await portalApi.listPos()
-  rows.value = r.data
+async function loadPos() {
+  const r = await portalApi.listPosPaged(currentPage.value - 1, pageSize.value)
+  rows.value = r.data.content
+  total.value = r.data.totalElements
+}
+
+onMounted(loadPos)
+
+watch([currentPage, pageSize], () => {
+  loadPos()
 })
 
 function csvEscape(v: unknown) {
@@ -122,6 +132,17 @@ async function exportOrders() {
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="pager-wrap">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100, 200]"
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="total"
+        @size-change="() => (currentPage = 1)"
+      />
+    </div>
   </div>
 </template>
 
@@ -146,5 +167,10 @@ async function exportOrders() {
   font-size: 13px;
   color: var(--el-text-color-secondary);
   margin-top: 8px;
+}
+.pager-wrap {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

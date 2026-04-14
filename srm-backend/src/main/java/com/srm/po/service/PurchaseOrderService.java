@@ -403,6 +403,14 @@ public class PurchaseOrderService {
     }
 
     @Transactional(readOnly = true)
+    public Page<PurchaseOrder> pageReleasedForSupplier(Long supplierId, int page, int size) {
+        Supplier s = masterDataService.requireSupplier(supplierId);
+        int p = Math.max(page, 0);
+        int s2 = Math.min(Math.max(size, 10), 200);
+        return purchaseOrderRepository.findBySupplierAndStatusOrderByIdDesc(s, PoStatus.RELEASED, PageRequest.of(p, s2));
+    }
+
+    @Transactional(readOnly = true)
     public List<PurchaseOrder> listReleasedWithLinesForSupplier(Long supplierId) {
         Supplier s = masterDataService.requireSupplier(supplierId);
         return purchaseOrderRepository.findWithLinesBySupplierAndStatusOrderByIdDesc(s, PoStatus.RELEASED);

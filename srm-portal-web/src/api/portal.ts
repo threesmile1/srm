@@ -83,6 +83,15 @@ export type PortalTodoSummary = {
   pendingRfqQuotations?: number
 }
 
+/** Spring Data Page JSON */
+export type SpringPage<T> = {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+}
+
 export type PortalRfqSummary = {
   id: number
   rfqNo: string
@@ -151,6 +160,8 @@ export const portalApi = {
   ) => api.post(`/api/v1/portal/rfq/${rfqId}/quotation`, body),
 
   listPos: () => api.get<PoSummary[]>('/api/v1/portal/purchase-orders'),
+  listPosPaged: (page: number, size: number) =>
+    api.get<SpringPage<PoSummary>>('/api/v1/portal/purchase-orders/paged', { params: { page, size } }),
   getPo: (id: number) => api.get<PoDetail>(`/api/v1/portal/purchase-orders/${id}`),
   confirmLine: (lineId: number, body: { confirmedQty: number; promisedDate?: string | null; supplierRemark?: string }) =>
     api.post(`/api/v1/portal/purchase-order-lines/${lineId}/confirm`, body),
