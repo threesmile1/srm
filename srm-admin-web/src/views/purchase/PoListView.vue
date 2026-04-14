@@ -196,6 +196,7 @@ async function handleImport(uploadFile: { raw: File }) {
       </template>
       <el-table-column type="selection" width="42" />
       <el-table-column prop="poNo" label="订单号" width="200" />
+      <el-table-column prop="u9DocNo" label="U9单号" width="200" />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">{{ statusMap[row.status] || row.status }}</template>
       </el-table-column>

@@ -3,6 +3,7 @@ import { api } from './http'
 export type PoSummary = {
   id: number
   poNo: string
+  u9DocNo: string | null
   status: string
   supplierCode: string
   supplierName: string

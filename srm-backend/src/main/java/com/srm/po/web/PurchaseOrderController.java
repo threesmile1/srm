@@ -131,6 +131,7 @@ public class PurchaseOrderController {
     public record PoSummaryResponse(
             Long id,
             String poNo,
+            String u9DocNo,
             String status,
             String supplierCode,
             String supplierName,
@@ -141,6 +142,7 @@ public class PurchaseOrderController {
             return new PoSummaryResponse(
                     po.getId(),
                     po.getPoNo(),
+                    po.getU9DocNo(),
                     po.getStatus().name(),
                     po.getSupplier().getCode(),
                     po.getSupplier().getName(),
