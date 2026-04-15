@@ -15,6 +15,7 @@ import com.srm.master.domain.Supplier;
 import com.srm.master.service.MasterDataService;
 import com.srm.notification.service.NotificationService;
 import com.srm.notification.service.StaffNotificationService;
+import com.srm.execution.repo.AsnLineRepository;
 import com.srm.po.domain.PoStatus;
 import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
@@ -53,6 +54,7 @@ public class PurchaseOrderService {
     private final ApprovalService approvalService;
     private final NotificationService notificationService;
     private final StaffNotificationService staffNotificationService;
+    private final AsnLineRepository asnLineRepository;
 
     @Transactional(readOnly = true)
     public List<PurchaseOrder> listByOrg(Long procurementOrgId) {
@@ -209,6 +211,9 @@ public class PurchaseOrderService {
         }
         if (po.getStatus() == PoStatus.PENDING_APPROVAL || po.getStatus() == PoStatus.DRAFT) {
             throw new BadRequestException("订单状态异常(U9同步)，请人工处理: " + po.getPoNo() + " " + po.getStatus());
+        }
+        if (asnLineRepository.existsByPurchaseOrderId(po.getId())) {
+            throw new BadRequestException("订单已有发货通知(ASN)，禁止覆盖同步: " + po.getPoNo());
         }
         for (PurchaseOrderLine old : po.getLines()) {
             if (old.getReceivedQty() != null && old.getReceivedQty().compareTo(BigDecimal.ZERO) > 0) {

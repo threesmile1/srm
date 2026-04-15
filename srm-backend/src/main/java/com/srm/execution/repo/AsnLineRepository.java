@@ -15,4 +15,10 @@ public interface AsnLineRepository extends JpaRepository<AsnLine, Long> {
             where l.purchaseOrderLine.id = :polId and a.status = 'SUBMITTED'
             """)
     BigDecimal sumShipQtySubmittedForPolLine(@Param("polId") Long polId);
+
+    @Query("""
+            select (count(l) > 0) from AsnLine l
+            where l.purchaseOrderLine.purchaseOrder.id = :poId
+            """)
+    boolean existsByPurchaseOrderId(@Param("poId") Long purchaseOrderId);
 }
