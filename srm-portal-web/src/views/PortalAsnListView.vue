@@ -9,6 +9,7 @@ const rows = ref<AsnNotice[]>([])
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailRow = ref<AsnNotice | null>(null)
+const apiBase = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
 const statusLabel: Record<string, string> = {
   SUBMITTED: '已提交',
@@ -64,6 +65,10 @@ async function voidNotice(row: AsnNotice) {
         : ''
     ElMessage.error(msg || '作废失败')
   }
+}
+
+function downloadLogisticsAttachment(row: AsnNotice) {
+  window.open(`${apiBase}/api/v1/portal/asn-notices/${row.id}/logistics-attachment/file`, '_blank')
 }
 </script>
 
@@ -131,6 +136,17 @@ async function voidNotice(row: AsnNotice) {
           <el-descriptions-item label="预计到货">{{ detailRow.etaDate ?? '—' }}</el-descriptions-item>
           <el-descriptions-item label="承运商">{{ detailRow.carrier ?? '—' }}</el-descriptions-item>
           <el-descriptions-item label="运单号">{{ detailRow.trackingNo ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="收货人">{{ detailRow.receiverName ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="联系方式">{{ detailRow.receiverPhone ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="收货地址">{{ detailRow.receiverAddress ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="物流单附件">
+            <template v-if="detailRow.logisticsAttachmentOriginalName">
+              <el-button type="primary" link size="small" @click="downloadLogisticsAttachment(detailRow)">
+                下载（{{ detailRow.logisticsAttachmentOriginalName }}）
+              </el-button>
+            </template>
+            <template v-else>—</template>
+          </el-descriptions-item>
           <el-descriptions-item label="备注">{{ detailRow.remark ?? '—' }}</el-descriptions-item>
         </el-descriptions>
         <div class="detail-lines-title">发货明细</div>

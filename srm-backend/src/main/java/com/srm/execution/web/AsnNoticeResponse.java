@@ -15,6 +15,12 @@ public record AsnNoticeResponse(
         String carrier,
         String trackingNo,
         String remark,
+        String receiverName,
+        String receiverPhone,
+        String receiverAddress,
+        String logisticsAttachmentOriginalName,
+        String logisticsAttachmentContentType,
+        Long logisticsAttachmentFileSize,
         List<AsnLineResponse> lines
 ) {
     public static AsnNoticeResponse from(AsnNotice n) {
@@ -29,6 +35,12 @@ public record AsnNoticeResponse(
                 n.getCarrier(),
                 n.getTrackingNo(),
                 n.getRemark(),
+                n.getReceiverName(),
+                n.getReceiverPhone(),
+                n.getReceiverAddress(),
+                n.getLogisticsAttachmentOriginalName(),
+                n.getLogisticsAttachmentContentType(),
+                n.getLogisticsAttachmentFileSize(),
                 n.getLines().stream().map(AsnLineResponse::from).toList()
         );
     }

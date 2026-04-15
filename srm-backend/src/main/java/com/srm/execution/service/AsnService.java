@@ -18,13 +18,23 @@ import com.srm.web.error.ForbiddenException;
 import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -33,6 +43,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AsnService {
 
+    private static final long MAX_ASN_LOGISTICS_ATTACHMENT_BYTES = 10L * 1024 * 1024;
+
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final AsnNoticeRepository asnNoticeRepository;
     private final AsnLineRepository asnLineRepository;
@@ -40,6 +52,9 @@ public class AsnService {
     private final AsnNumberAllocator asnNumberAllocator;
     private final MasterDataService masterDataService;
     private final NotificationService notificationService;
+
+    @Value("${srm.asn-upload-dir:${user.home}/.srm/asn-files}")
+    private String asnUploadRoot;
 
     @Transactional(readOnly = true)
     public List<AsnNotice> listByPurchaseOrder(Long poId) {
@@ -81,6 +96,9 @@ public class AsnService {
             String carrier,
             String trackingNo,
             String remark,
+            String receiverName,
+            String receiverPhone,
+            String receiverAddress,
             List<AsnLineInput> lines
     ) {
         PurchaseOrder po = purchaseOrderRepository.findWithDetailsById(purchaseOrderId)
@@ -109,6 +127,9 @@ public class AsnService {
         notice.setCarrier(carrier);
         notice.setTrackingNo(trackingNo);
         notice.setRemark(remark);
+        notice.setReceiverName(trimToNull(receiverName));
+        notice.setReceiverPhone(trimToNull(receiverPhone));
+        notice.setReceiverAddress(trimToNull(receiverAddress));
         notice.setStatus(AsnStatus.SUBMITTED);
 
         int n = 1;
@@ -154,6 +175,12 @@ public class AsnService {
         return saved;
     }
 
+    private static String trimToNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
     /**
      * 供应商作废发货通知：仅 {@link AsnStatus#SUBMITTED} 可作废；若已有收货单行关联该通知下的 ASN 行则不允许。
      * 作废后不再计入 {@link AsnLineRepository#sumShipQtySubmittedForPolLine}，可重新创建 ASN。
@@ -172,5 +199,109 @@ public class AsnService {
         return asnNoticeRepository.save(n);
     }
 
+    private Path asnStorageRoot() {
+        return Paths.get(asnUploadRoot).toAbsolutePath().normalize();
+    }
+
+    private static String sanitizeAttachmentOriginalName(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "file";
+        }
+        String name = raw.replace('\\', '/');
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0 && slash < name.length() - 1) {
+            name = name.substring(slash + 1);
+        }
+        if (name.isBlank()) {
+            return "file";
+        }
+        return name.length() > 400 ? name.substring(0, 400) : name;
+    }
+
+    private static String fileExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot >= name.length() - 1) {
+            return "";
+        }
+        return name.substring(dot + 1).toLowerCase();
+    }
+
+    /**
+     * 门户上传物流单附件（单文件）。允许覆盖旧附件。
+     */
+    @Transactional
+    public LogisticsAttachmentBrief uploadLogisticsAttachmentBySupplier(long supplierId, long asnId, MultipartFile file)
+            throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("请选择文件");
+        }
+        if (file.getSize() > MAX_ASN_LOGISTICS_ATTACHMENT_BYTES) {
+            throw new BadRequestException("附件不能超过 10MB");
+        }
+        AsnNotice n = requireWithLinesForSupplier(supplierId, asnId);
+        if (n.getStatus() != AsnStatus.SUBMITTED) {
+            throw new BadRequestException("仅已提交的发货通知可上传物流单附件");
+        }
+
+        String original = sanitizeAttachmentOriginalName(file.getOriginalFilename());
+        Path root = asnStorageRoot();
+        Files.createDirectories(root);
+        Path dir = root.resolve(String.valueOf(asnId));
+        Files.createDirectories(dir);
+
+        String ext = fileExtension(original);
+        String storedFileName = UUID.randomUUID() + (ext.isEmpty() ? "" : "." + ext);
+        Path target = dir.resolve(storedFileName);
+        file.transferTo(target);
+        String relative = asnId + "/" + storedFileName;
+
+        // best-effort cleanup old file (if any)
+        String old = n.getLogisticsAttachmentStoredPath();
+        if (old != null && !old.isBlank()) {
+            try {
+                Path oldAbs = asnStorageRoot().resolve(old).normalize();
+                if (oldAbs.startsWith(asnStorageRoot()) && Files.isRegularFile(oldAbs)) {
+                    Files.deleteIfExists(oldAbs);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        n.setLogisticsAttachmentOriginalName(original);
+        n.setLogisticsAttachmentContentType(file.getContentType());
+        n.setLogisticsAttachmentFileSize(file.getSize());
+        n.setLogisticsAttachmentStoredPath(relative);
+        asnNoticeRepository.save(n);
+
+        return new LogisticsAttachmentBrief(
+                Objects.requireNonNullElse(n.getLogisticsAttachmentOriginalName(), original),
+                n.getLogisticsAttachmentContentType(),
+                Objects.requireNonNullElse(n.getLogisticsAttachmentFileSize(), file.getSize())
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public LogisticsAttachmentDownload openLogisticsAttachmentDownloadBySupplier(long supplierId, long asnId) {
+        AsnNotice n = requireWithLinesForSupplier(supplierId, asnId);
+        String stored = n.getLogisticsAttachmentStoredPath();
+        if (stored == null || stored.isBlank()) {
+            throw new NotFoundException("物流单附件不存在");
+        }
+        Path abs = asnStorageRoot().resolve(stored).normalize();
+        Path base = asnStorageRoot().normalize();
+        if (!abs.startsWith(base)) {
+            throw new NotFoundException("附件路径非法");
+        }
+        if (!Files.isRegularFile(abs)) {
+            throw new NotFoundException("文件已丢失");
+        }
+        Resource resource = new FileSystemResource(abs.toFile());
+        return new LogisticsAttachmentDownload(resource, n.getLogisticsAttachmentOriginalName(), n.getLogisticsAttachmentContentType());
+    }
+
     public record AsnLineInput(long purchaseOrderLineId, BigDecimal shipQty) {}
+
+    public record LogisticsAttachmentBrief(String originalName, String contentType, long fileSize) {}
+
+    public record LogisticsAttachmentDownload(Resource resource, String originalFileName, String contentType) {}
 }

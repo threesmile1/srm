@@ -58,6 +58,30 @@ public class AsnNotice extends BaseEntity {
     @Column(length = 1000)
     private String remark;
 
+    /** 物流单/快递单上的收货信息（可由附件识别回填） */
+    @Column(name = "receiver_name", length = 255)
+    private String receiverName;
+
+    @Column(name = "receiver_phone", length = 128)
+    private String receiverPhone;
+
+    @Column(name = "receiver_address", length = 1000)
+    private String receiverAddress;
+
+    /** 物流单附件（单文件） */
+    @Column(name = "logistics_attachment_original_name", length = 500)
+    private String logisticsAttachmentOriginalName;
+
+    @Column(name = "logistics_attachment_content_type", length = 200)
+    private String logisticsAttachmentContentType;
+
+    @Column(name = "logistics_attachment_file_size")
+    private Long logisticsAttachmentFileSize;
+
+    /** 相对 {@code srm.asn-upload-dir} 的路径，如 {asnId}/{uuid}.jpg */
+    @Column(name = "logistics_attachment_stored_path", length = 1000)
+    private String logisticsAttachmentStoredPath;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private AsnStatus status = AsnStatus.SUBMITTED;

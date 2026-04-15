@@ -140,6 +140,12 @@ export type AsnNotice = {
   carrier: string | null
   trackingNo: string | null
   remark: string | null
+  receiverName: string | null
+  receiverPhone: string | null
+  receiverAddress: string | null
+  logisticsAttachmentOriginalName: string | null
+  logisticsAttachmentContentType: string | null
+  logisticsAttachmentFileSize: number | null
   lines: AsnLine[]
 }
 
@@ -177,6 +183,26 @@ export const portalApi = {
     carrier?: string | null
     trackingNo?: string | null
     remark?: string | null
+    receiverName?: string | null
+    receiverPhone?: string | null
+    receiverAddress?: string | null
     lines: { purchaseOrderLineId: number; shipQty: number }[]
   }) => api.post<AsnNotice>('/api/v1/portal/asn-notices', body),
+
+  uploadAsnLogisticsAttachment: (asnId: number, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/api/v1/portal/asn-notices/${asnId}/logistics-attachment`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  parseLogisticsByUrl: (url: string) =>
+    api.post<{
+      carrier: string | null
+      trackingNo: string | null
+      receiverName: string | null
+      receiverPhone: string | null
+      receiverAddress: string | null
+    }>('/api/v1/portal/logistics/parse-by-url', { url }),
 }
