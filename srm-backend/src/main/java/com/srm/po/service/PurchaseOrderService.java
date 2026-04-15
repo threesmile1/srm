@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Locale;
 import java.util.List;
 import java.util.Optional;
 
@@ -123,7 +124,12 @@ public class PurchaseOrderService {
     }
 
     /**
-     * U9 帆软已审采购订单同步：按采购组织 + U9 单号幂等；新建或覆盖（无收货）后自动 {@link PoStatus#RELEASED} 并通知供应商。
+     * U9 帆软采购订单同步：按采购组织 + U9 单号幂等。
+     * <p>
+     * 规则：
+     * - 已审核且未关闭/取消：自动发布（RELEASED）并通知供应商
+     * - 其他状态：也同步进 SRM（用于可视化/追溯），但不自动发布
+     * - 若订单已有关联业务（ASN/收货）则禁止覆盖订单行
      */
     @Transactional
     public PurchaseOrder upsertFromU9AndRelease(
@@ -133,6 +139,7 @@ public class PurchaseOrderService {
             String currency,
             String remark,
             LocalDate businessDate,
+            String u9DocStatus,
             String officialOrderNo,
             String store2,
             String receiverName,
@@ -159,11 +166,13 @@ public class PurchaseOrderService {
             throw new BadRequestException("订单至少一行");
         }
 
+        U9StatusDecision decision = decideStatusFromU9(u9DocStatus);
+
         Optional<PurchaseOrder> existingOpt =
                 purchaseOrderRepository.findByProcurementOrg_IdAndU9DocNo(org.getId(), u9Key);
         if (existingOpt.isPresent()) {
             return refreshU9PurchaseOrderLinesAndRelease(existingOpt.get(), supplier, currency, remark,
-                    businessDate, officialOrderNo, store2, receiverName, terminalPhone, installAddress, lines);
+                    businessDate, u9DocStatus, decision, officialOrderNo, store2, receiverName, terminalPhone, installAddress, lines);
         }
 
         String poNo = poNumberService.nextPoNo(org);
@@ -182,16 +191,54 @@ public class PurchaseOrderService {
         po.setU9TerminalPhone(terminalPhone);
         po.setU9InstallAddress(installAddress);
         po.setRevisionNo(1);
-        po.setStatus(PoStatus.DRAFT);
+        po.setStatus(decision.targetStatus());
 
         appendCreateLines(po, lines);
 
         PurchaseOrder saved = purchaseOrderRepository.save(po);
-        saved.setStatus(PoStatus.APPROVED);
-        saved = purchaseOrderRepository.save(saved);
         auditService.log(null, null, "CREATE_PO_U9", "PO", saved.getId(),
                 "poNo=" + saved.getPoNo() + " u9DocNo=" + u9Key + " lines=" + saved.getLines().size(), null);
-        return release(saved.getId());
+        if (decision.autoRelease()) {
+            // U9 已审核且未关闭/取消 → SRM 自动发布
+            if (saved.getStatus() == PoStatus.DRAFT) {
+                saved.setStatus(PoStatus.APPROVED);
+                saved = purchaseOrderRepository.save(saved);
+            }
+            return release(saved.getId());
+        }
+        return saved;
+    }
+
+    private record U9StatusDecision(PoStatus targetStatus, boolean autoRelease) {}
+
+    /**
+     * U9 状态文本 → SRM 状态与是否自动发布。
+     * <p>
+     * 约定：仅「已审核且未关闭/取消」会自动发布；其他状态仅入库不发布。
+     */
+    private static U9StatusDecision decideStatusFromU9(String u9DocStatus) {
+        String s = u9DocStatus != null ? u9DocStatus.trim() : "";
+        if (s.isEmpty()) {
+            return new U9StatusDecision(PoStatus.DRAFT, false);
+        }
+        String t = s.toLowerCase(Locale.ROOT);
+        // 取消/作废优先
+        if (t.contains("作废") || t.contains("取消") || t.contains("canceled") || t.contains("cancelled")) {
+            return new U9StatusDecision(PoStatus.CANCELLED, false);
+        }
+        if (t.contains("关闭") || t.contains("closed")) {
+            return new U9StatusDecision(PoStatus.CLOSED, false);
+        }
+        // 审核通过/已审核
+        if (t.contains("已审核") || t.contains("已审") || t.contains("审核通过") || t.contains("approved")) {
+            return new U9StatusDecision(PoStatus.APPROVED, true);
+        }
+        // 未审核/待审核等
+        if (t.contains("未审核") || t.contains("未审") || t.contains("待审") || t.contains("draft") || t.contains("pending")) {
+            return new U9StatusDecision(PoStatus.DRAFT, false);
+        }
+        // 未识别时保守：入库不发布
+        return new U9StatusDecision(PoStatus.DRAFT, false);
     }
 
     private PurchaseOrder refreshU9PurchaseOrderLinesAndRelease(
@@ -200,17 +247,24 @@ public class PurchaseOrderService {
             String currency,
             String remark,
             LocalDate businessDate,
+            String u9DocStatus,
+            U9StatusDecision decision,
             String officialOrderNo,
             String store2,
             String receiverName,
             String terminalPhone,
             String installAddress,
             List<CreateLine> lines) {
+        // 已关闭/取消：允许更新 U9 扩展字段，但不覆盖订单行、不自动变更状态（避免影响既有业务）
         if (po.getStatus() == PoStatus.CANCELLED || po.getStatus() == PoStatus.CLOSED) {
-            throw new BadRequestException("订单已关闭或取消，不可覆盖同步: " + po.getPoNo());
-        }
-        if (po.getStatus() == PoStatus.PENDING_APPROVAL || po.getStatus() == PoStatus.DRAFT) {
-            throw new BadRequestException("订单状态异常(U9同步)，请人工处理: " + po.getPoNo() + " " + po.getStatus());
+            po.setRemark(remark);
+            po.setU9BusinessDate(businessDate);
+            po.setU9OfficialOrderNo(officialOrderNo);
+            po.setU9Store2(store2);
+            po.setU9ReceiverName(receiverName);
+            po.setU9TerminalPhone(terminalPhone);
+            po.setU9InstallAddress(installAddress);
+            return purchaseOrderRepository.save(po);
         }
         if (asnLineRepository.existsByPurchaseOrderId(po.getId())) {
             throw new BadRequestException("订单已有发货通知(ASN)，禁止覆盖同步: " + po.getPoNo());
@@ -235,6 +289,12 @@ public class PurchaseOrderService {
         po.setU9ReceiverName(receiverName);
         po.setU9TerminalPhone(terminalPhone);
         po.setU9InstallAddress(installAddress);
+
+        // U9 状态同步（仅在 SRM 尚未发布时进行；避免同步把已发布的订单改回草稿/关闭等）
+        if (po.getStatus() != PoStatus.RELEASED) {
+            po.setStatus(decision.targetStatus());
+        }
+
         // 先清空行并 flush，让 orphanRemoval 先把旧行删除，再插入新行，避免唯一键冲突/会话不一致
         po.getLines().clear();
         purchaseOrderRepository.save(po);
@@ -243,7 +303,7 @@ public class PurchaseOrderService {
         PurchaseOrder saved = purchaseOrderRepository.save(po);
         auditService.log(null, null, "UPDATE_PO_U9", "PO", saved.getId(),
                 "poNo=" + saved.getPoNo() + " lines=" + saved.getLines().size(), null);
-        if (saved.getStatus() == PoStatus.APPROVED) {
+        if (decision.autoRelease() && saved.getStatus() == PoStatus.APPROVED) {
             return release(saved.getId());
         }
         return saved;

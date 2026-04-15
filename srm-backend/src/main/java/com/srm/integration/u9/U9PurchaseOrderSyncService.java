@@ -38,7 +38,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 从帆软 Decision 拉取 U9 已审核未关闭采购订单（caigou_cp.cpt），写入 SRM 并自动发布。
+ * 从帆软 Decision 拉取 U9 采购订单（caigou_cp.cpt），写入 SRM。
+ * <p>
+ * SRM 侧行为：
+ * - 幂等键：采购组织 + U9 单据编号
+ * - 已审核且未关闭/取消：自动发布给供应商
+ * - 其他状态：也可同步入 SRM，但不会误发布；且若订单已有关联业务（ASN/收货）将跳过覆盖
  */
 @Slf4j
 @Service
@@ -157,6 +162,9 @@ public class U9PurchaseOrderSyncService {
         if (msg.contains("已有收货")) {
             return "订单已有收货禁止覆盖";
         }
+        if (msg.contains("已有发货通知") || msg.contains("ASN")) {
+            return "订单已有发货通知(ASN)禁止覆盖";
+        }
         if (msg.length() > 120) {
             return msg.substring(0, 120) + "…";
         }
@@ -206,6 +214,10 @@ public class U9PurchaseOrderSyncService {
                 firstText(first, "安装地址", "DescFlexField_PrivateDescSeg10"),
                 firstTextByKeyContains(first, "安装地址", "地址", "address"));
 
+        String docStatusText = firstNonBlank(
+                firstText(first, "单据状态", "DocStatus", "doc_status", "status", "状态"),
+                firstTextByKeyContains(first, "单据状态", "单据 状态", "状态", "docstatus"));
+
         List<CreateLine> lines = new ArrayList<>();
         Set<String> seenLineKeys = new LinkedHashSet<>();
         for (JsonNode row : docRows) {
@@ -248,6 +260,7 @@ public class U9PurchaseOrderSyncService {
                 currency,
                 remark,
                 businessDate,
+                docStatusText,
                 officialOrderNo,
                 store2,
                 receiverName,
