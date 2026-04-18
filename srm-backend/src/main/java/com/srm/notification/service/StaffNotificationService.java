@@ -96,6 +96,12 @@ public class StaffNotificationService {
         if ("PO".equals(docType)) {
             return "采购订单";
         }
+        if ("GR".equals(docType)) {
+            return "收货单";
+        }
+        if ("ASN".equals(docType)) {
+            return "发货通知";
+        }
         return docType != null ? docType : "单据";
     }
 }

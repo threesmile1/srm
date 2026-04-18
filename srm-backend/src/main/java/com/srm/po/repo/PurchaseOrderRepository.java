@@ -26,6 +26,11 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
     @EntityGraph(attributePaths = {
             "lines", "lines.material", "lines.warehouse", "supplier", "procurementOrg", "ledger"
     })
+    Optional<PurchaseOrder> findByProcurementOrg_IdAndPoNo(Long procurementOrgId, String poNo);
+
+    @EntityGraph(attributePaths = {
+            "lines", "lines.material", "lines.warehouse", "supplier", "procurementOrg", "ledger"
+    })
     Optional<PurchaseOrder> findByProcurementOrg_IdAndU9DocNo(Long procurementOrgId, String u9DocNo);
 
     boolean existsByProcurementOrg_IdAndU9DocNo(Long procurementOrgId, String u9DocNo);
@@ -41,6 +46,27 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, Lo
 
     @EntityGraph(attributePaths = {"supplier"})
     Page<PurchaseOrder> findByProcurementOrgIdOrderByIdDesc(Long procurementOrgId, Pageable pageable);
+
+    /**
+     * 管理端列表：采购组织 + 可选模糊条件（均为空则等价于仅按组织分页）。
+     */
+    @EntityGraph(attributePaths = {"supplier"})
+    @Query("""
+            select p from PurchaseOrder p
+            where p.procurementOrg.id = :oid
+              and (:poNo is null or lower(p.poNo) like lower(concat('%', :poNo, '%')))
+              and (:u9DocNo is null or (p.u9DocNo is not null
+                  and lower(p.u9DocNo) like lower(concat('%', :u9DocNo, '%'))))
+              and (:officialOrderNo is null or (p.u9OfficialOrderNo is not null
+                  and lower(p.u9OfficialOrderNo) like lower(concat('%', :officialOrderNo, '%'))))
+            order by p.id desc
+            """)
+    Page<PurchaseOrder> pageByProcurementOrgWithOptionalFilters(
+            @Param("oid") Long procurementOrgId,
+            @Param("poNo") String poNo,
+            @Param("u9DocNo") String u9DocNo,
+            @Param("officialOrderNo") String officialOrderNo,
+            Pageable pageable);
 
     @EntityGraph(attributePaths = {"supplier", "procurementOrg"})
     List<PurchaseOrder> findBySupplierAndStatusOrderByIdDesc(Supplier supplier, PoStatus status);

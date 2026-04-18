@@ -33,6 +33,14 @@ const qPo = computed(() => {
   return v != null && v !== '' ? Number(v) : null
 })
 
+function isNingboOrg(o: OrgUnit | null | undefined): boolean {
+  if (!o) return false
+  const code = (o.code ?? '').trim().toUpperCase()
+  const name = (o.name ?? '').trim()
+  const u9 = (o.u9OrgCode ?? '').trim()
+  return code === 'NB' || name === '宁波公司' || u9 === '1001711275375071'
+}
+
 async function loadOrgs() {
   const ledgers = await foundationApi.listLedgers()
   if (!ledgers.data.length) return
@@ -115,6 +123,12 @@ async function loadPoDetail() {
 
 watch(procurementOrgId, async (v) => {
   if (v != null) sessionStorage.setItem(PROC_ORG_STORAGE_PREFIX + 'gr-create', String(v))
+  const o = orgs.value.find((x) => x.id === v)
+  if (v != null && isNingboOrg(o)) {
+    // 宁波禁止手工新建收货：静默回列表，避免与「收货单列表」混淆时反复弹窗
+    router.replace('/purchase/receipts')
+    return
+  }
   await loadWh()
   await loadPos()
   await loadPoDetail()
@@ -126,6 +140,11 @@ watch(purchaseOrderId, () => {
 
 onMounted(async () => {
   await loadOrgs()
+  const o = orgs.value.find((x) => x.id === procurementOrgId.value)
+  if (isNingboOrg(o ?? null)) {
+    router.replace('/purchase/receipts')
+    return
+  }
   await loadWh()
   await loadPos()
   await loadPoDetail()

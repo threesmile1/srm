@@ -3,6 +3,7 @@ package com.srm.invoice.service;
 import com.srm.execution.domain.GoodsReceipt;
 import com.srm.execution.domain.GoodsReceiptLine;
 import com.srm.execution.repo.GoodsReceiptRepository;
+import com.srm.foundation.util.NingboProcurementOrg;
 import com.srm.foundation.domain.OrgUnit;
 import com.srm.foundation.repo.OrgUnitRepository;
 import com.srm.foundation.service.AuditService;
@@ -487,6 +488,18 @@ public class InvoiceService {
             throw new BadRequestException("对账期间起不能晚于结束日期");
         }
 
+        // 宁波：对账门禁 - 期间内存在 U9 收货单非“业务关闭”时不允许发起对账
+        if (NingboProcurementOrg.isNingbo(org)) {
+            Object[] hit = goodsReceiptRepository.findFirstU9NotBusinessClosedInPeriod(
+                    supplierId, procurementOrgId, periodFrom, periodTo);
+            if (hit != null && hit.length >= 1) {
+                String grNo = hit[0] != null ? String.valueOf(hit[0]) : "";
+                String u9Status = hit.length >= 2 && hit[1] != null ? String.valueOf(hit[1]) : "空";
+                throw new BadRequestException("宁波公司对账仅允许 U9 状态为「业务关闭」的收货单进入对账口径。"
+                        + "当前期间内存在未满足条件的收货单：" + grNo + "（U9 状态: " + u9Status + "）");
+            }
+        }
+
         BigDecimal grAmt = goodsReceiptRepository.sumAmountBySupplierAndOrgAndPeriod(
                 supplierId, procurementOrgId, periodFrom, periodTo);
         // 收货月口径下，订单侧展示金额与收货计价一致（均为入库执行额）
@@ -822,6 +835,13 @@ public class InvoiceService {
             }
             if (!gr.getProcurementOrg().getId().equals(procurementOrgId)) {
                 throw new BadRequestException(prefix + "收货单不属于当前采购组织");
+            }
+            // 宁波：收货单来自 U9 同步时，仅 U9 状态=业务关闭 才允许开票/对账等后续动作
+            if (NingboProcurementOrg.isNingbo(gr.getProcurementOrg())
+                    && "U9".equalsIgnoreCase(gr.getSourceSystem())
+                    && !"业务关闭".equals(gr.getU9Status() != null ? gr.getU9Status().trim() : null)) {
+                throw new BadRequestException(prefix + "宁波公司收货单需 U9 状态为「业务关闭」才可开票（当前: "
+                        + (gr.getU9Status() != null ? gr.getU9Status() : "空") + "）");
             }
             if (li.purchaseOrderLineId() != null) {
                 Long polId = li.purchaseOrderLineId();

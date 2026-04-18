@@ -175,10 +175,6 @@ async function logout() {
               <el-icon><Van /></el-icon>
               <template #title>收货单</template>
             </el-menu-item>
-            <el-menu-item index="/purchase/receipts/new">
-              <el-icon><Plus /></el-icon>
-              <template #title>新建收货</template>
-            </el-menu-item>
             <el-menu-item index="/purchase/reports/execution">
               <el-icon><DataAnalysis /></el-icon>
               <template #title>执行报表</template>

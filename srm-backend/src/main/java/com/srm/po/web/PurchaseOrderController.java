@@ -48,9 +48,12 @@ public class PurchaseOrderController {
     public Page<PoSummaryResponse> listPaged(
             @RequestParam Long procurementOrgId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String poNo,
+            @RequestParam(required = false) String u9DocNo,
+            @RequestParam(required = false) String officialOrderNo
     ) {
-        return purchaseOrderService.pageByOrg(procurementOrgId, page, size)
+        return purchaseOrderService.pageByOrg(procurementOrgId, page, size, poNo, u9DocNo, officialOrderNo)
                 .map(PoSummaryResponse::from);
     }
 
@@ -89,8 +92,8 @@ public class PurchaseOrderController {
      * 写入 SRM 并自动发布给供应商（幂等键：采购组织 + U9 单据编号）。
      */
     @PostMapping("/sync-from-u9")
-    public U9PurchaseOrderSyncService.U9PurchaseOrderSyncResult syncPurchaseOrdersFromU9() {
-        return u9PurchaseOrderSyncService.fetchAndApply();
+    public U9PurchaseOrderSyncService.U9PurchaseOrderSyncResult syncPurchaseOrdersFromU9(@RequestParam Long procurementOrgId) {
+        return u9PurchaseOrderSyncService.fetchAndApply(procurementOrgId);
     }
 
     @PostMapping("/{id:\\d+}/submit")

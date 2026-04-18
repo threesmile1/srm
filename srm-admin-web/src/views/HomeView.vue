@@ -90,7 +90,8 @@ function goApproval(_item: PendingItem) {
 const shortcuts = [
   { label: '新建请购', path: '/pr/new', color: '#409EFF' },
   { label: '新建订单', path: '/purchase/orders/new', color: '#67C23A' },
-  { label: '新建收货', path: '/purchase/receipts/new', color: '#E6A23C' },
+  /** 收货单列表内再「新建收货」（非宁波）；宁波走 U9 同步，避免误进 /receipts/new 被拦截 */
+  { label: '收货单', path: '/purchase/receipts', color: '#E6A23C' },
   { label: '绩效考核', path: '/perf/evaluations', color: '#F56C6C' },
 ]
 </script>

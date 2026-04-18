@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { purchaseApi, type PoDetail } from '../../api/purchase'
@@ -12,6 +12,12 @@ const po = ref<PoDetail | null>(null)
 const asnList = ref<AsnNotice[]>([])
 const approvalInst = ref<ApprovalInstance | null | undefined>(undefined)
 const tab = ref<'lines' | 'asn'>('lines')
+
+/** 与 GrListView 宁波判定一致（详情仅有组织编码时以 NB 为主） */
+const isNingboProcurement = computed(() => {
+  const c = (po.value?.procurementOrgCode ?? '').trim().toUpperCase()
+  return c === 'NB'
+})
 
 async function load() {
   const id = Number(route.params.id)
@@ -67,7 +73,7 @@ onMounted(async () => {
       <el-button @click="router.push('/purchase/orders')">返回列表</el-button>
       <span class="title">{{ po.poNo }} · {{ po.status }}</span>
       <el-button
-        v-if="po.status === 'RELEASED'"
+        v-if="po.status === 'RELEASED' && !isNingboProcurement"
         type="primary"
         plain
         @click="
@@ -78,6 +84,14 @@ onMounted(async () => {
         "
       >
         录入收货
+      </el-button>
+      <el-button
+        v-else-if="po.status === 'RELEASED' && isNingboProcurement"
+        type="primary"
+        plain
+        @click="router.push('/purchase/receipts')"
+      >
+        前往收货单（U9 同步）
       </el-button>
     </div>
     <el-descriptions :column="2" border>

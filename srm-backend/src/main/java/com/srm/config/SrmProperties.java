@@ -13,8 +13,13 @@ import java.util.List;
 @ConfigurationProperties(prefix = "srm")
 public class SrmProperties {
 
-    /** 允许超收比例，例如 0.05 = 5% */
-    private BigDecimal overReceiveRatio = new BigDecimal("0.05");
+    /** 允许超收比例，例如 0.05 = 5%；仅当 {@link #enforceMaxReceiveLimit} 为 true 时参与可收上限计算 */
+    private BigDecimal overReceiveRatio = new BigDecimal("1.0");
+
+    /**
+     * 为 true 时按「订购量×(1+超收比例)−已收」限制单行本次可收；为 false 时不校验该上限（仍须数量为正、ASN 等其它规则）。
+     */
+    private boolean enforceMaxReceiveLimit = false;
 
     private String exportPoTypeCode = "PO01";
 
@@ -98,6 +103,14 @@ public class SrmProperties {
          * 采购订单报表 parameters；空则 POST {@code [{}]}（与物料可配 pinming 不同）。
          */
         private List<FineReportParameter> purchaseOrderFineReportParameters = new ArrayList<>();
+
+        /**
+         * 宁波收货单 shouhuo_nb.cpt（与 decision-api-url 共用；parameters 默认同现场 {@code [{}]}）。
+         */
+        private String goodsReceiptReportPath = "API/shouhuo_nb.cpt";
+
+        /** 帆软 parameters；空则 {@code [{}]} */
+        private List<FineReportParameter> goodsReceiptFineReportParameters = new ArrayList<>();
 
         /**
          * 料号-多厂仓库（衣柜等）：liaohao + cangku_suzhou/cangku_chengdu/cangku_huanan。

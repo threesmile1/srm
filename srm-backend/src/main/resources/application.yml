@@ -44,7 +44,10 @@ srm:
     include-stack-trace: false
   # 供应商门户上传的发票附件（PDF/图片）本地目录
   invoice-upload-dir: ${user.home}/.srm/invoice-files
-  over-receive-ratio: 0.05
+  # 超收比例：仅当 enforce-max-receive-limit=true 时使用；可收上限 = 订购量 × (1 + 本比例) − 已收
+  over-receive-ratio: 1.0
+  # false = 不按订购量/超收比例限制可收数量（仍校验 ASN 等）
+  enforce-max-receive-limit: false
   export-po-type-code: PO01
   export-gr-type-code: GR01
   # 物料同步：帆软 Decision POST（响应含 err_code=0、data 为对象数组或 {data:{rows:[]}}）或 GET JSON

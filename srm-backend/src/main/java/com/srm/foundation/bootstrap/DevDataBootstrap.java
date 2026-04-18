@@ -108,6 +108,22 @@ public class DevDataBootstrap implements ApplicationRunner {
         admin.getRoles().add(adminRole);
         userAccountRepository.save(admin);
 
+        roleRepository.findByCode("CUSTOMER_SERVICE").ifPresent(csRole -> {
+            if (!userAccountRepository.existsByUsername("cs")) {
+                orgUnitRepository.findByCode("NB").ifPresent(nb -> {
+                    UserAccount cs = new UserAccount();
+                    cs.setUsername("cs");
+                    cs.setPasswordHash(passwordEncoder.encode("cs123"));
+                    cs.setDisplayName("客服演示");
+                    cs.setEnabled(true);
+                    cs.setDefaultProcurementOrg(nb);
+                    cs.getRoles().add(csRole);
+                    userAccountRepository.save(cs);
+                    log.info("Dev 客服账号 cs / cs123（宁波公司默认组织）");
+                });
+            }
+        });
+
         log.info("Foundation seed done. admin / admin123");
     }
 

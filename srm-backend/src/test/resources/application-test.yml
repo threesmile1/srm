@@ -19,7 +19,8 @@ spring:
 
 srm:
   business-timezone: Asia/Shanghai
-  over-receive-ratio: 0.05
+  over-receive-ratio: 1.0
+  enforce-max-receive-limit: false
   export-po-type-code: PO01
   export-gr-type-code: GR01
 

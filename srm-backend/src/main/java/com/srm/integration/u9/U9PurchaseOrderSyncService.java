@@ -3,13 +3,13 @@ package com.srm.integration.u9;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.srm.config.SrmProperties;
 import com.srm.foundation.domain.OrgUnit;
 import com.srm.foundation.domain.OrgUnitType;
 import com.srm.foundation.domain.Warehouse;
 import com.srm.foundation.repo.OrgUnitRepository;
 import com.srm.foundation.repo.WarehouseRepository;
+import com.srm.foundation.util.NingboProcurementOrg;
 import com.srm.master.domain.MaterialItem;
 import com.srm.master.domain.Supplier;
 import com.srm.master.repo.MaterialItemRepository;
@@ -63,7 +63,7 @@ public class U9PurchaseOrderSyncService {
 
     public record U9PurchaseOrderSyncResult(
             int rowCount,
-            /** 无法归组（缺少单据编号或核算组织列）的帆软行数 */
+            /** 无法归组（缺少单据编号列）的帆软行数 */
             int droppedUnmappedRows,
             int groupsTotal,
             int ordersCreated,
@@ -73,7 +73,7 @@ public class U9PurchaseOrderSyncService {
             /** 按异常信息前缀聚合（便于一眼看出共因，如「物料不存在」） */
             Map<String, Integer> errorReasonCounts) {}
 
-    public U9PurchaseOrderSyncResult fetchAndApply() {
+    public U9PurchaseOrderSyncResult fetchAndApply(Long procurementOrgId) {
         SrmProperties.U9 u9 = properties.getU9();
         if (!u9.isEnabled()) {
             throw new BadRequestException("未启用 U9 拉取：请配置 srm.u9.enabled=true");
@@ -81,6 +81,18 @@ public class U9PurchaseOrderSyncService {
         if (!StringUtils.hasText(u9.getDecisionApiUrl())) {
             throw new BadRequestException("请配置 srm.u9.decision-api-url");
         }
+        if (procurementOrgId == null) {
+            throw new BadRequestException("缺少 procurementOrgId");
+        }
+        OrgUnit org = orgUnitRepository.findById(procurementOrgId)
+                .orElseThrow(() -> new BadRequestException("采购组织不存在: " + procurementOrgId));
+        if (org.getOrgType() != OrgUnitType.PROCUREMENT) {
+            throw new BadRequestException("请选择采购组织");
+        }
+        if (!NingboProcurementOrg.isNingbo(org)) {
+            throw new BadRequestException("仅宁波公司支持从 U9 同步采购订单");
+        }
+
         List<JsonNode> rows = fetchAllPages(u9);
         if (rows.isEmpty()) {
             return new U9PurchaseOrderSyncResult(0, 0, 0, 0, 0, 0, List.of(), Map.of());
@@ -89,13 +101,11 @@ public class U9PurchaseOrderSyncService {
         int droppedUnmappedRows = 0;
         for (JsonNode row : rows) {
             String docNo = normalizeDocNo(row);
-            String orgKey = normalizeAccountOrg(row);
-            if (!StringUtils.hasText(docNo) || !StringUtils.hasText(orgKey)) {
+            if (!StringUtils.hasText(docNo)) {
                 droppedUnmappedRows++;
                 continue;
             }
-            String g = orgKey + "\t" + docNo;
-            byDoc.computeIfAbsent(g, k -> new ArrayList<>()).add(row);
+            byDoc.computeIfAbsent(docNo, k -> new ArrayList<>()).add(row);
         }
         int created = 0;
         int updated = 0;
@@ -103,13 +113,11 @@ public class U9PurchaseOrderSyncService {
         List<String> errors = new ArrayList<>();
         Map<String, Integer> reasonCounts = new LinkedHashMap<>();
         for (Map.Entry<String, List<JsonNode>> e : byDoc.entrySet()) {
-            String[] parts = e.getKey().split("\t", 2);
-            String accountOrg = parts[0];
-            String docNo = parts[1];
+            String docNo = e.getKey();
             List<JsonNode> docRows = new ArrayList<>(e.getValue());
             docRows.sort(Comparator.comparingInt(U9PurchaseOrderSyncService::lineNoFromRow));
             try {
-                boolean wasNew = upsertOneDocument(accountOrg, docNo, docRows);
+                boolean wasNew = upsertOneDocument(org, docNo, docRows);
                 if (wasNew) {
                     created++;
                 } else {
@@ -118,10 +126,10 @@ public class U9PurchaseOrderSyncService {
             } catch (Exception ex) {
                 skipped++;
                 String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-                errors.add("U9 " + docNo + "（组织 " + accountOrg + "）：" + msg);
+                errors.add("U9 " + docNo + "：" + msg);
                 String reasonKey = summarizeReason(msg);
                 reasonCounts.merge(reasonKey, 1, Integer::sum);
-                log.warn("U9 PO 同步失败 docNo={} org={}", docNo, accountOrg, ex);
+                log.warn("U9 PO 同步失败 docNo={}", docNo, ex);
             }
         }
         log.info("U9 采购订单同步完成：rows={} groups={} created={} updated={} skipped={} errorReasonCounts={}",
@@ -138,9 +146,7 @@ public class U9PurchaseOrderSyncService {
         if (msg.contains("物料不存在")) {
             return "物料不存在（请先做 U9 物料同步）";
         }
-        if (msg.contains("未找到采购组织")) {
-            return "未匹配 org_unit.u9_org_code（核算组织）";
-        }
+        // 采购组织由接口 procurementOrgId 指定，不再依赖帆软返回组织列
         if (msg.contains("供应商未授权")) {
             return "供应商未授权当前采购组织";
         }
@@ -172,11 +178,7 @@ public class U9PurchaseOrderSyncService {
     }
 
     /** @return true if newly inserted, false if updated existing */
-    private boolean upsertOneDocument(String accountOrgStr, String docNo, List<JsonNode> docRows) {
-        OrgUnit org = orgUnitRepository
-                .findFirstByOrgTypeAndU9OrgCode(OrgUnitType.PROCUREMENT, accountOrgStr.trim())
-                .orElseThrow(() -> new BadRequestException(
-                        "未找到采购组织：请在 org_unit.u9_org_code 配置核算组织 " + accountOrgStr));
+    private boolean upsertOneDocument(OrgUnit org, String docNo, List<JsonNode> docRows) {
         Warehouse wh = pickDefaultWarehouse(org);
         JsonNode first = docRows.get(0);
         String supplierCode = requireText(first,
@@ -217,6 +219,8 @@ public class U9PurchaseOrderSyncService {
         String docStatusText = firstNonBlank(
                 firstText(first, "单据状态", "DocStatus", "doc_status", "status", "状态"),
                 firstTextByKeyContains(first, "单据状态", "单据 状态", "状态", "docstatus"));
+
+        Boolean u9BusinessClosed = parseU9BusinessClosed(first);
 
         List<CreateLine> lines = new ArrayList<>();
         Set<String> seenLineKeys = new LinkedHashSet<>();
@@ -261,6 +265,7 @@ public class U9PurchaseOrderSyncService {
                 remark,
                 businessDate,
                 docStatusText,
+                u9BusinessClosed,
                 officialOrderNo,
                 store2,
                 receiverName,
@@ -268,6 +273,23 @@ public class U9PurchaseOrderSyncService {
                 installAddress,
                 lines);
         return !existed;
+    }
+
+    private static Boolean parseU9BusinessClosed(JsonNode row) {
+        String t = firstText(row,
+                "业务是否关闭", "是否业务关闭", "业务关闭", "IsBusinessClosed", "is_business_closed", "BUSINESS_CLOSED");
+        if (!StringUtils.hasText(t)) {
+            return null;
+        }
+        String v = t.trim();
+        if ("1".equals(v) || "Y".equalsIgnoreCase(v) || "YES".equalsIgnoreCase(v) || "TRUE".equalsIgnoreCase(v)) {
+            return Boolean.TRUE;
+        }
+        if ("0".equals(v) || "N".equalsIgnoreCase(v) || "NO".equalsIgnoreCase(v) || "FALSE".equalsIgnoreCase(v)) {
+            return Boolean.FALSE;
+        }
+        // 其他值：保守不落（避免误判）；如需可按真实返回继续扩展
+        return null;
     }
 
     private Warehouse pickDefaultWarehouse(OrgUnit org) {
@@ -289,7 +311,7 @@ public class U9PurchaseOrderSyncService {
             if (raw == null || raw.isBlank()) {
                 throw new BadRequestException("帆软采购订单接口返回空内容");
             }
-            return parseObjectRows(raw);
+            return FineReportObjectRowParser.parseObjectRows(raw);
         }
         List<JsonNode> all = new ArrayList<>();
         int pageNum = 1;
@@ -312,7 +334,7 @@ public class U9PurchaseOrderSyncService {
                     totalPagesHint = tp.asInt();
                 }
             }
-            List<JsonNode> pageRows = parseObjectRows(raw);
+            List<JsonNode> pageRows = FineReportObjectRowParser.parseObjectRows(raw);
             log.debug("U9 采购订单帆软分页 page={} rows={} perPage={} total_page_number={}",
                     pageNum, pageRows.size(), perPage, totalPagesHint >= 0 ? totalPagesHint : "n/a");
             all.addAll(pageRows);
@@ -347,132 +369,12 @@ public class U9PurchaseOrderSyncService {
         return parameters;
     }
 
-    private List<JsonNode> parseObjectRows(String json) {
-        try {
-            String trimmed = json.trim();
-            if (trimmed.startsWith("\uFEFF")) {
-                trimmed = trimmed.substring(1);
-            }
-            if (trimmed.startsWith("<") || trimmed.regionMatches(true, 0, "<!DOCTYPE", 0, 9)) {
-                throw new BadRequestException("帆软接口返回了 HTML 而非 JSON");
-            }
-            JsonNode root = MAPPER.readTree(trimmed);
-            FineReportJson.assertSuccess(root);
-            if (root.has("data") && root.get("data").isTextual()) {
-                String inner = root.get("data").asText().trim();
-                if (inner.startsWith("[") || inner.startsWith("{")) {
-                    return parseObjectRows(inner);
-                }
-            }
-            JsonNode array = FineReportJson.locateObjectRowArray(root);
-            if (array != null && array.isArray()) {
-                List<JsonNode> out = new ArrayList<>();
-                for (JsonNode n : array) {
-                    if (n != null && n.isObject()) {
-                        out.add(n);
-                    }
-                }
-                if (!out.isEmpty()) {
-                    return out;
-                }
-            }
-            JsonNode data = root.get("data");
-            if (data != null && data.isObject()) {
-                JsonNode rows = data.get("rows");
-                if (rows != null && rows.isArray() && !rows.isEmpty()) {
-                    if (rows.get(0).isObject()) {
-                        List<JsonNode> out = new ArrayList<>();
-                        for (JsonNode n : rows) {
-                            if (n.isObject()) {
-                                out.add(n);
-                            }
-                        }
-                        return out;
-                    }
-                    if (rows.get(0).isArray()) {
-                        List<JsonNode> grid = tryConvertColumnsRowsGrid(data.get("columns"), rows);
-                        if (!grid.isEmpty()) {
-                            return grid;
-                        }
-                    }
-                }
-            }
-            throw new BadRequestException("采购订单帆软响应中未找到对象行数组（也不支持解析 columns+rows 网格）");
-        } catch (JsonProcessingException e) {
-            throw new BadRequestException("解析采购订单 JSON 失败: " + e.getOriginalMessage());
-        }
-    }
-
-    /**
-     * 帆软 data.rows 为二维数组时，按 columns 或首行表头转成对象行（与物料同步逻辑一致）。
-     */
-    private List<JsonNode> tryConvertColumnsRowsGrid(JsonNode columnsNode, JsonNode rowsNode) {
-        if (rowsNode == null || !rowsNode.isArray() || rowsNode.isEmpty() || !rowsNode.get(0).isArray()) {
-            return List.of();
-        }
-        List<String> colNames = new ArrayList<>();
-        int dataStart = 0;
-        if (columnsNode != null && columnsNode.isArray() && !columnsNode.isEmpty()) {
-            columnsNode.forEach(c -> colNames.add(textValue(c).trim()));
-        } else {
-            JsonNode header = rowsNode.get(0);
-            for (JsonNode h : header) {
-                colNames.add(textValue(h).trim());
-            }
-            dataStart = 1;
-        }
-        List<JsonNode> out = new ArrayList<>();
-        for (int r = dataStart; r < rowsNode.size(); r++) {
-            JsonNode row = rowsNode.get(r);
-            if (!row.isArray()) {
-                continue;
-            }
-            ObjectNode obj = MAPPER.createObjectNode();
-            for (int i = 0; i < colNames.size() && i < row.size(); i++) {
-                String cn = colNames.get(i);
-                if (!StringUtils.hasText(cn)) {
-                    continue;
-                }
-                JsonNode cell = row.get(i);
-                if (cell == null || cell.isNull()) {
-                    continue;
-                }
-                if (cell.isNumber()) {
-                    if (cell.isIntegralNumber()) {
-                        obj.put(cn, cell.longValue());
-                    } else {
-                        obj.put(cn, cell.decimalValue());
-                    }
-                } else if (cell.isTextual()) {
-                    obj.put(cn, cell.asText());
-                } else if (cell.isBoolean()) {
-                    obj.put(cn, cell.booleanValue());
-                } else {
-                    obj.set(cn, cell);
-                }
-            }
-            out.add(obj);
-        }
-        return out;
-    }
-
     private static String normalizeDocNo(JsonNode row) {
         return firstText(row,
                 "单据编号", "DocNo", "doc_no", "DOCNO", "PO_DOC_NO", "采购订单号", "采购单号", "订单编号", "PO_NO", "pono");
     }
 
-    private static String normalizeAccountOrg(JsonNode row) {
-        for (String k : List.of(
-                "核算组织", "采购组织",
-                "AccountOrg", "account_org", "Account_Org", "ACCOUNTORG"
-        )) {
-            String raw = firstText(row, k);
-            if (StringUtils.hasText(raw)) {
-                return raw.trim();
-            }
-        }
-        return "";
-    }
+    // 核算组织列已取消：以接口入参 procurementOrgId 为准
 
     private static int lineNoFromRow(JsonNode row) {
         for (String k : List.of("行号", "DocLineNo", "line_no", "LineNo", "lineno", "LINE_NO")) {

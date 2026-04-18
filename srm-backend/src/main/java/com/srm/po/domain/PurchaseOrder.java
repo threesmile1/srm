@@ -85,6 +85,13 @@ public class PurchaseOrder extends BaseEntity {
     @Column(name = "u9_install_address", length = 512)
     private String u9InstallAddress;
 
+    /**
+     * U9 业务是否关闭：1=业务关闭。
+     * 由宁波 U9 采购订单接口同步写入，用于后续业务门禁/展示。
+     */
+    @Column(name = "u9_business_closed")
+    private Boolean u9BusinessClosed;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "export_status", nullable = false, length = 32)
     private ExportStatus exportStatus = ExportStatus.NOT_EXPORTED;

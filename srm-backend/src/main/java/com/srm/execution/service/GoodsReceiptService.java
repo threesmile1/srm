@@ -4,6 +4,7 @@ import com.srm.config.SrmProperties;
 import com.srm.execution.domain.AsnLine;
 import com.srm.execution.domain.AsnNotice;
 import com.srm.execution.domain.AsnStatus;
+import com.srm.execution.domain.GrStatus;
 import com.srm.execution.domain.GoodsReceipt;
 import com.srm.execution.domain.GoodsReceiptLine;
 import com.srm.execution.repo.AsnLineRepository;
@@ -15,6 +16,7 @@ import com.srm.foundation.domain.OrgUnitType;
 import com.srm.foundation.domain.Warehouse;
 import com.srm.foundation.repo.OrgUnitRepository;
 import com.srm.foundation.repo.WarehouseRepository;
+import com.srm.foundation.util.NingboProcurementOrg;
 import com.srm.po.domain.PoStatus;
 import com.srm.po.domain.PurchaseOrder;
 import com.srm.po.domain.PurchaseOrderLine;
@@ -26,6 +28,11 @@ import com.srm.web.error.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -98,6 +105,55 @@ public class GoodsReceiptService {
                 .toList();
     }
 
+    /**
+     * 列表汇总（分页版）。
+     */
+    @Transactional(readOnly = true)
+    public Page<GoodsReceiptSummaryResponse> pageSummaryByOrg(Long procurementOrgId, boolean waitReceiveOnly, Pageable pageable) {
+        Page<GoodsReceipt> page;
+        if (waitReceiveOnly) {
+            var org = orgUnitRepository.findById(procurementOrgId)
+                    .orElseThrow(() -> new NotFoundException("采购组织不存在: " + procurementOrgId));
+            page = NingboProcurementOrg.isNingbo(org)
+                    ? goodsReceiptRepository.pageWaitReceiveNingboPendingCsConfirm(
+                            procurementOrgId, AsnStatus.SUBMITTED, pageable)
+                    : goodsReceiptRepository.pageWaitReceiveByOrg(procurementOrgId, AsnStatus.SUBMITTED, pageable);
+        } else {
+            page = goodsReceiptRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId, pageable);
+        }
+
+        List<GoodsReceipt> list = page.getContent();
+        if (list.isEmpty()) {
+            return new PageImpl<>(List.of(), pageable, page.getTotalElements());
+        }
+        Set<Long> poIds = list.stream().map(g -> g.getPurchaseOrder().getId()).collect(Collectors.toSet());
+        Map<Long, BigDecimal> pendingByPo = new HashMap<>();
+        if (!poIds.isEmpty()) {
+            for (Object[] row : purchaseOrderLineRepository.sumPendingReceiptQtyByPurchaseOrderIds(poIds)) {
+                pendingByPo.put((Long) row[0], (BigDecimal) row[1]);
+            }
+        }
+        Set<Long> grIds = list.stream().map(GoodsReceipt::getId).collect(Collectors.toSet());
+        Set<Long> withAsn = new HashSet<>();
+        if (!grIds.isEmpty()) {
+            withAsn.addAll(goodsReceiptLineRepository.findGoodsReceiptIdsHavingAsnLine(grIds));
+        }
+        Set<Long> poIdsWithSubmittedAsn = new HashSet<>();
+        if (!poIds.isEmpty()) {
+            poIdsWithSubmittedAsn.addAll(asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsn(poIds));
+        }
+        Map<Long, String> asnSummaryByGrId = asnSummaryByGoodsReceiptId(grIds);
+        List<GoodsReceiptSummaryResponse> mapped = list.stream()
+                .map(g -> GoodsReceiptSummaryResponse.from(
+                        g,
+                        pendingByPo.getOrDefault(g.getPurchaseOrder().getId(), BigDecimal.ZERO),
+                        withAsn.contains(g.getId()),
+                        poIdsWithSubmittedAsn.contains(g.getPurchaseOrder().getId()),
+                        asnSummaryByGrId.getOrDefault(g.getId(), "")))
+                .toList();
+        return new PageImpl<>(mapped, pageable, page.getTotalElements());
+    }
+
     /** 每个收货单下去重后的 ASN 单号，逗号拼接（与列表「发货通知」列一致） */
     private Map<Long, String> asnSummaryByGoodsReceiptId(Set<Long> grIds) {
         if (grIds.isEmpty()) {
@@ -124,6 +180,9 @@ public class GoodsReceiptService {
      */
     @Transactional(readOnly = true)
     public List<OpenPoAsnReceiptRow> listOpenPurchaseOrdersWithSubmittedAsnNoGoodsReceipt(Long procurementOrgId) {
+        var org = orgUnitRepository.findById(procurementOrgId)
+                .orElseThrow(() -> new NotFoundException("采购组织不存在: " + procurementOrgId));
+        boolean ningbo = NingboProcurementOrg.isNingbo(org);
         List<PurchaseOrder> pos = purchaseOrderRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId);
         Set<Long> poWithAnyGr = goodsReceiptRepository.findDistinctPurchaseOrderIdsByProcurementOrgId(procurementOrgId);
         Set<Long> allReleasedPoIds = pos.stream()
@@ -137,7 +196,9 @@ public class GoodsReceiptService {
         for (Object[] row : purchaseOrderLineRepository.sumPendingReceiptQtyByPurchaseOrderIds(allReleasedPoIds)) {
             pendingByPo.put((Long) row[0], (BigDecimal) row[1]);
         }
-        Set<Long> withSubmittedAsn = new HashSet<>(asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsn(allReleasedPoIds));
+        Set<Long> withSubmittedAsn = new HashSet<>(ningbo
+                ? asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsnPendingCsConfirm(allReleasedPoIds)
+                : asnNoticeRepository.findPurchaseOrderIdsHavingSubmittedAsn(allReleasedPoIds));
         List<OpenPoAsnReceiptRow> out = new ArrayList<>();
         for (PurchaseOrder po : pos) {
             if (po.getStatus() != PoStatus.RELEASED) {
@@ -154,16 +215,26 @@ public class GoodsReceiptService {
             if (pend.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
-            AsnNotice asn = asnNoticeRepository
-                    .findFirstByPurchaseOrder_IdAndStatusOrderByIdDesc(poId, AsnStatus.SUBMITTED)
-                    .orElse(null);
+            AsnNotice asn;
+            if (ningbo) {
+                List<AsnNotice> pendingCs = asnNoticeRepository.findSubmittedAsnPendingCsByPurchaseOrder(
+                        poId, AsnStatus.SUBMITTED, PageRequest.of(0, 1));
+                asn = pendingCs.isEmpty() ? null : pendingCs.get(0);
+            } else {
+                asn = asnNoticeRepository
+                        .findFirstByPurchaseOrder_IdAndStatusOrderByIdDesc(poId, AsnStatus.SUBMITTED)
+                        .orElse(null);
+            }
             if (asn == null) {
                 continue;
             }
+            String poU9 = po.getU9DocNo();
             out.add(new OpenPoAsnReceiptRow(
                     poId,
                     po.getPoNo(),
+                    poU9 != null && !poU9.isBlank() ? poU9 : "",
                     asn.getAsnNo(),
+                    asn.getId(),
                     pend.stripTrailingZeros().toPlainString()));
         }
         return out;
@@ -172,7 +243,9 @@ public class GoodsReceiptService {
     public record OpenPoAsnReceiptRow(
             long purchaseOrderId,
             String poNo,
+            String poU9DocNo,
             String asnNo,
+            long asnNoticeId,
             String pendingReceiptQty
     ) {}
 
@@ -196,6 +269,9 @@ public class GoodsReceiptService {
         if (org.getOrgType() != OrgUnitType.PROCUREMENT) {
             throw new BadRequestException("请选择采购组织");
         }
+        if (NingboProcurementOrg.isNingbo(org)) {
+            throw new BadRequestException("宁波公司收货单仅能从 U9（帆软）同步，禁止在 SRM 手工创建");
+        }
         Warehouse wh = warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new NotFoundException("仓库不存在: " + warehouseId));
         if (!wh.getProcurementOrg().getId().equals(procurementOrgId)) {
@@ -218,8 +294,6 @@ public class GoodsReceiptService {
         Map<Long, PurchaseOrderLine> polMap = po.getLines().stream()
                 .collect(Collectors.toMap(PurchaseOrderLine::getId, Function.identity()));
 
-        BigDecimal ratio = BigDecimal.ONE.add(srmProperties.getOverReceiveRatio());
-
         for (GrLineInput in : lines) {
             PurchaseOrderLine pol = polMap.get(in.purchaseOrderLineId());
             if (pol == null) {
@@ -231,10 +305,18 @@ public class GoodsReceiptService {
             if (in.asnLineId() == null) {
                 throw new BadRequestException("行 " + pol.getLineNo() + " 收货必须关联 ASN 发货通知");
             }
-            BigDecimal maxRecv = pol.getQty().multiply(ratio).setScale(4, RoundingMode.HALF_UP)
-                    .subtract(pol.getReceivedQty());
-            if (in.receivedQty().compareTo(maxRecv) > 0) {
-                throw new BadRequestException("行 " + pol.getLineNo() + " 超过可收上限（含超收比例）: " + maxRecv);
+            if (srmProperties.isEnforceMaxReceiveLimit()) {
+                BigDecimal ratio = BigDecimal.ONE.add(srmProperties.getOverReceiveRatio());
+                BigDecimal maxRecv = pol.getQty().multiply(ratio).setScale(4, RoundingMode.HALF_UP)
+                        .subtract(pol.getReceivedQty());
+                if (in.receivedQty().compareTo(maxRecv) > 0) {
+                    String poRef = po.getPoNo();
+                    if (StringUtils.hasText(po.getU9DocNo()) && !po.getU9DocNo().equals(po.getPoNo())) {
+                        poRef = poRef + "（U9 " + po.getU9DocNo() + "）";
+                    }
+                    throw new BadRequestException(
+                            "采购订单 " + poRef + " 行 " + pol.getLineNo() + " 超过可收上限（含超收比例）: " + maxRecv);
+                }
             }
             AsnLine al = asnLineRepository.findById(in.asnLineId())
                     .orElseThrow(() -> new NotFoundException("ASN 行不存在: " + in.asnLineId()));
@@ -253,6 +335,7 @@ public class GoodsReceiptService {
         gr.setPurchaseOrder(po);
         gr.setReceiptDate(receiptDate);
         gr.setRemark(remark);
+        gr.setStatus(GrStatus.APPROVED);
 
         int n = 1;
         for (GrLineInput in : lines) {
@@ -271,6 +354,7 @@ public class GoodsReceiptService {
         }
 
         GoodsReceipt saved = goodsReceiptRepository.save(gr);
+
         staffNotificationService.notifyProcurementOrgStakeholders(
                 procurementOrgId,
                 "收货单已登记",
@@ -278,15 +362,18 @@ public class GoodsReceiptService {
                 "GR_CREATED",
                 "GR",
                 saved.getId());
+        maybeClosePurchaseOrderIfFullyReceived(po);
 
+        return saved;
+    }
+
+    private void maybeClosePurchaseOrderIfFullyReceived(PurchaseOrder po) {
         boolean allReceived = po.getLines().stream()
                 .allMatch(l -> l.getReceivedQty().compareTo(l.getQty()) >= 0);
         if (allReceived) {
             po.setStatus(PoStatus.CLOSED);
             purchaseOrderRepository.save(po);
         }
-
-        return saved;
     }
 
     /**
@@ -322,6 +409,12 @@ public class GoodsReceiptService {
     /**
      * 发货通知按 id 降序遍历，每条订单行首次出现的 ASN 行即为「最新通知」对应行（与 GrCreateView 一致）。
      */
+    /** U9 同步收货时可选关联：与手工收货「按最新 ASN 匹配」一致。 */
+    @Transactional(readOnly = true)
+    public AsnLine findBestAsnLineForPolOrNull(PurchaseOrder po, PurchaseOrderLine pol) {
+        return bestAsnLinePerPurchaseOrderLine(po).get(pol.getId());
+    }
+
     private Map<Long, AsnLine> bestAsnLinePerPurchaseOrderLine(PurchaseOrder po) {
         List<AsnNotice> notices = asnNoticeRepository.findByPurchaseOrderOrderByIdDesc(po);
         Map<Long, AsnLine> map = new LinkedHashMap<>();

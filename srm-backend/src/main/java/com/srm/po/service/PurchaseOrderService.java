@@ -63,10 +63,15 @@ public class PurchaseOrderService {
     }
 
     @Transactional(readOnly = true)
-    public Page<PurchaseOrder> pageByOrg(Long procurementOrgId, int page, int size) {
+    public Page<PurchaseOrder> pageByOrg(Long procurementOrgId, int page, int size,
+                                         String poNo, String u9DocNo, String officialOrderNo) {
         int safeSize = Math.min(Math.max(size, 1), 500);
         int safePage = Math.max(page, 0);
-        return purchaseOrderRepository.findByProcurementOrgIdOrderByIdDesc(procurementOrgId, PageRequest.of(safePage, safeSize));
+        String p = StringUtils.hasText(poNo) ? poNo.trim() : null;
+        String u9 = StringUtils.hasText(u9DocNo) ? u9DocNo.trim() : null;
+        String off = StringUtils.hasText(officialOrderNo) ? officialOrderNo.trim() : null;
+        return purchaseOrderRepository.pageByProcurementOrgWithOptionalFilters(
+                procurementOrgId, p, u9, off, PageRequest.of(safePage, safeSize));
     }
 
     @Transactional(readOnly = true)
@@ -140,6 +145,7 @@ public class PurchaseOrderService {
             String remark,
             LocalDate businessDate,
             String u9DocStatus,
+            Boolean u9BusinessClosed,
             String officialOrderNo,
             String store2,
             String receiverName,
@@ -172,7 +178,7 @@ public class PurchaseOrderService {
                 purchaseOrderRepository.findByProcurementOrg_IdAndU9DocNo(org.getId(), u9Key);
         if (existingOpt.isPresent()) {
             return refreshU9PurchaseOrderLinesAndRelease(existingOpt.get(), supplier, currency, remark,
-                    businessDate, u9DocStatus, decision, officialOrderNo, store2, receiverName, terminalPhone, installAddress, lines);
+                    businessDate, u9DocStatus, decision, u9BusinessClosed, officialOrderNo, store2, receiverName, terminalPhone, installAddress, lines);
         }
 
         String poNo = poNumberService.nextPoNo(org);
@@ -185,6 +191,7 @@ public class PurchaseOrderService {
         po.setU9DocNo(u9Key);
         po.setRemark(remark);
         po.setU9BusinessDate(businessDate);
+        po.setU9BusinessClosed(u9BusinessClosed);
         po.setU9OfficialOrderNo(officialOrderNo);
         po.setU9Store2(store2);
         po.setU9ReceiverName(receiverName);
@@ -249,6 +256,7 @@ public class PurchaseOrderService {
             LocalDate businessDate,
             String u9DocStatus,
             U9StatusDecision decision,
+            Boolean u9BusinessClosed,
             String officialOrderNo,
             String store2,
             String receiverName,
@@ -259,6 +267,7 @@ public class PurchaseOrderService {
         if (po.getStatus() == PoStatus.CANCELLED || po.getStatus() == PoStatus.CLOSED) {
             po.setRemark(remark);
             po.setU9BusinessDate(businessDate);
+            po.setU9BusinessClosed(u9BusinessClosed);
             po.setU9OfficialOrderNo(officialOrderNo);
             po.setU9Store2(store2);
             po.setU9ReceiverName(receiverName);
@@ -284,6 +293,7 @@ public class PurchaseOrderService {
         }
         po.setRemark(remark);
         po.setU9BusinessDate(businessDate);
+        po.setU9BusinessClosed(u9BusinessClosed);
         po.setU9OfficialOrderNo(officialOrderNo);
         po.setU9Store2(store2);
         po.setU9ReceiverName(receiverName);

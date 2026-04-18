@@ -1,6 +1,7 @@
 package com.srm.execution.web;
 
 import com.srm.execution.service.GoodsReceiptService;
+import com.srm.integration.u9.U9GoodsReceiptSyncService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -26,10 +29,21 @@ import java.util.List;
 public class GoodsReceiptController {
 
     private final GoodsReceiptService goodsReceiptService;
+    private final U9GoodsReceiptSyncService u9GoodsReceiptSyncService;
 
     @GetMapping
     public List<GoodsReceiptSummaryResponse> list(@RequestParam Long procurementOrgId) {
         return goodsReceiptService.listSummaryByOrg(procurementOrgId);
+    }
+
+    @GetMapping("/paged")
+    public Page<GoodsReceiptSummaryResponse> listPaged(
+            @RequestParam Long procurementOrgId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false") boolean waitReceiveOnly
+    ) {
+        return goodsReceiptService.pageSummaryByOrg(procurementOrgId, waitReceiveOnly, PageRequest.of(page, size));
     }
 
     /**
@@ -54,6 +68,14 @@ public class GoodsReceiptController {
         return goodsReceiptService.backfillAsnLineIdsForPurchaseOrder(
                 req.purchaseOrderId(),
                 Boolean.TRUE.equals(req.overwriteExisting()));
+    }
+
+    /**
+     * 宁波公司：从帆软 {@code API/shouhuo_nb.cpt} 拉取 U9 收货单写入 SRM（幂等：采购组织 + u9_doc_no）。
+     */
+    @PostMapping("/sync-from-u9")
+    public U9GoodsReceiptSyncService.U9GoodsReceiptSyncResult syncFromU9(@RequestParam Long procurementOrgId) {
+        return u9GoodsReceiptSyncService.fetchAndApply(procurementOrgId);
     }
 
     @PostMapping

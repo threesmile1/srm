@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { approvalApi, type ApprovalInstance } from '../../api/approval'
 import { useAuthStore } from '../../stores/auth'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
+const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const instances = ref<ApprovalInstance[]>([])
 const filterStatus = ref('')
@@ -14,6 +17,14 @@ const quickLoadingId = ref<number | null>(null)
 
 const statusMap: Record<string, string> = {
   PENDING: '待审批', APPROVED: '已通过', REJECTED: '已驳回', CANCELLED: '已取消',
+}
+
+function docTypeLabel(t: string) {
+  if (t === 'PR') return '请购单'
+  if (t === 'PO') return '采购订单'
+  if (t === 'GR') return '收货单'
+  if (t === 'ASN') return '发货通知'
+  return t
 }
 
 function currentApprover() {
@@ -34,7 +45,26 @@ async function loadInstances() {
   instances.value = (await approvalApi.listInstances(filterStatus.value || undefined)).data
 }
 
-onMounted(loadInstances)
+async function tryOpenInstanceFromQuery() {
+  const raw = route.query.openInstanceId
+  if (raw == null || raw === '') return
+  const id = Number(Array.isArray(raw) ? raw[0] : raw)
+  if (!Number.isFinite(id)) return
+  try {
+    current.value = (await approvalApi.getInstance(id)).data
+    detailVisible.value = true
+  } catch {
+    ElMessage.warning('未找到审批实例或无权查看')
+  }
+  const q = { ...route.query } as Record<string, string | string[]>
+  delete q.openInstanceId
+  await router.replace({ path: route.path, query: q })
+}
+
+onMounted(async () => {
+  await loadInstances()
+  await tryOpenInstanceFromQuery()
+})
 
 async function showDetail(row: ApprovalInstance) {
   current.value = (await approvalApi.getInstance(row.id)).data
@@ -86,7 +116,7 @@ async function quickApprove(row: ApprovalInstance) {
   if (!ap) return
   try {
     await ElMessageBox.confirm(
-      `确认以「${ap.approverName}」通过当前审批级？\n${row.docType} ${row.docNo}（第 ${row.currentLevel} 级）`,
+      `确认以「${ap.approverName}」通过当前审批级？\n${docTypeLabel(row.docType)} ${row.docNo}（第 ${row.currentLevel} 级）`,
       '一键通过',
       { type: 'warning', confirmButtonText: '通过', cancelButtonText: '取消' },
     )
@@ -124,7 +154,11 @@ async function quickApprove(row: ApprovalInstance) {
       <template #empty>
         <DataTableEmpty />
       </template>
-      <el-table-column prop="docType" label="单据类型" width="100" />
+      <el-table-column label="单据类型" width="100">
+        <template #default="{ row }">
+          {{ docTypeLabel(row.docType) }}
+        </template>
+      </el-table-column>
       <el-table-column prop="docNo" label="单据编号" width="200" />
       <el-table-column prop="totalAmount" label="金额" width="120" />
       <el-table-column label="状态" width="100">
@@ -154,7 +188,7 @@ async function quickApprove(row: ApprovalInstance) {
 
     <el-dialog v-model="detailVisible" title="审批详情" width="700px" v-if="current">
       <el-descriptions :column="2" border size="small">
-        <el-descriptions-item label="单据类型">{{ current.docType }}</el-descriptions-item>
+        <el-descriptions-item label="单据类型">{{ docTypeLabel(current.docType) }}</el-descriptions-item>
         <el-descriptions-item label="单据编号">{{ current.docNo }}</el-descriptions-item>
         <el-descriptions-item label="金额">{{ current.totalAmount }}</el-descriptions-item>
         <el-descriptions-item label="状态">{{ statusMap[current.status] || current.status }}</el-descriptions-item>

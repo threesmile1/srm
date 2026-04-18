@@ -18,6 +18,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,6 +86,22 @@ public class AsnNotice extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private AsnStatus status = AsnStatus.SUBMITTED;
+
+    /** 宁波：客服确认记录（不阻断收货），由审批中心处理后写回。 */
+    @Column(name = "cs_confirm_status", length = 32)
+    private String csConfirmStatus;
+
+    @Column(name = "cs_confirmer_id")
+    private Long csConfirmerId;
+
+    @Column(name = "cs_confirmer_name", length = 128)
+    private String csConfirmerName;
+
+    @Column(name = "cs_confirmed_at")
+    private Instant csConfirmedAt;
+
+    @Column(name = "cs_confirm_comment", length = 1000)
+    private String csConfirmComment;
 
     @OneToMany(mappedBy = "asnNotice", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("lineNo ASC")

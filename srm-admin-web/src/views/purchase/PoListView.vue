@@ -2,10 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload as UploadIcon } from '@element-plus/icons-vue'
 import { foundationApi, type OrgUnit } from '../../api/foundation'
-import { purchaseApi, type PoSummary, type PoImportResult } from '../../api/purchase'
-import { executionApi, downloadArrayBuffer } from '../../api/execution'
+import { purchaseApi, type PoSummary } from '../../api/purchase'
 import { usePersistedProcurementOrg } from '../../composables/usePersistedProcurementOrg'
 import DataTableEmpty from '../../components/DataTableEmpty.vue'
 
@@ -17,12 +15,12 @@ const rows = ref<PoSummary[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
-const tableRef = ref()
-
-const importDialogVisible = ref(false)
-const importResult = ref<PoImportResult | null>(null)
-const importing = ref(false)
 const u9PoSyncing = ref(false)
+
+/** 列表筛选（模糊匹配，不区分大小写） */
+const filterPoNo = ref('')
+const filterU9DocNo = ref('')
+const filterOfficialOrderNo = ref('')
 
 /** 仅宁波公司采购组织展示「从 U9 同步采购订单（帆软）」（与 org_unit.code / name / u9_org_code 一致即可） */
 function isNingboProcurementOrg(o: OrgUnit | null | undefined): boolean {
@@ -53,10 +51,18 @@ async function loadOrgs() {
   orgs.value = ou.data.filter((o) => o.orgType === 'PROCUREMENT')
 }
 
+function listFilters() {
+  return {
+    poNo: filterPoNo.value,
+    u9DocNo: filterU9DocNo.value,
+    officialOrderNo: filterOfficialOrderNo.value,
+  }
+}
+
 async function loadPos() {
   if (orgId.value == null) return
   try {
-    const r = await purchaseApi.listPaged(orgId.value, currentPage.value - 1, pageSize.value)
+    const r = await purchaseApi.listPaged(orgId.value, currentPage.value - 1, pageSize.value, listFilters())
     rows.value = r.data.content
     total.value = r.data.totalElements
   } catch (e: unknown) {
@@ -83,6 +89,9 @@ async function loadPos() {
 }
 
 watch(orgId, () => {
+  filterPoNo.value = ''
+  filterU9DocNo.value = ''
+  filterOfficialOrderNo.value = ''
   currentPage.value = 1
   loadPos()
 })
@@ -100,24 +109,17 @@ function goDetail(id: number) {
   router.push(`/purchase/orders/${id}`)
 }
 
-async function exportSelected() {
-  const sel: PoSummary[] = tableRef.value?.getSelectionRows?.() ?? []
-  if (!sel.length) {
-    ElMessage.warning('请选择要导出的订单')
-    return
-  }
-  try {
-    const r = await executionApi.exportPurchaseOrders(sel.map((x) => x.id))
-    downloadArrayBuffer(r.data, 'srm-purchase-orders.xlsx')
-    ElMessage.success('已下载')
-    await loadPos()
-  } catch (e: unknown) {
-    const msg =
-      e && typeof e === 'object' && 'response' in e
-        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
-        : ''
-    ElMessage.error(msg || '导出失败')
-  }
+function applyPoFilters() {
+  currentPage.value = 1
+  loadPos()
+}
+
+function resetPoFilters() {
+  filterPoNo.value = ''
+  filterU9DocNo.value = ''
+  filterOfficialOrderNo.value = ''
+  currentPage.value = 1
+  loadPos()
 }
 
 async function syncPurchaseOrdersFromU9() {
@@ -125,9 +127,13 @@ async function syncPurchaseOrdersFromU9() {
     ElMessage.warning('请先在上方选择「宁波公司」采购组织')
     return
   }
+  if (orgId.value == null) {
+    ElMessage.warning('请先选择采购组织')
+    return
+  }
   u9PoSyncing.value = true
   try {
-    const r = await purchaseApi.syncFromU9()
+    const r = await purchaseApi.syncFromU9(orgId.value)
     const errN = r.data.errors?.length ?? 0
     const dropped = r.data.droppedUnmappedRows ?? 0
     if (errN === 0 && dropped === 0) {
@@ -139,7 +145,7 @@ async function syncPurchaseOrdersFromU9() {
       parts.push(`新建 ${r.data.ordersCreated}，更新 ${r.data.ordersUpdated}`)
       parts.push(`帆软行 ${r.data.rowCount}，归组 ${r.data.groupsTotal ?? '—'}`)
       if (dropped > 0) {
-        parts.push(`未归组 ${dropped} 行（缺单据编号或核算组织列）`)
+        parts.push(`未归组 ${dropped} 行（缺单据编号列）`)
       }
       if (errN > 0) {
         parts.push(`失败/跳过 ${errN} 单`)
@@ -154,7 +160,7 @@ async function syncPurchaseOrdersFromU9() {
       const detailBlocks: string[] = []
       if (dropped > 0) {
         detailBlocks.push(
-          `有 ${dropped} 行帆软数据未参与归组：缺少「单据编号」或「核算组织」列值，或列名与模板不一致（后端已支持列名大小写不敏感）。`,
+          `有 ${dropped} 行帆软数据未参与归组：缺少「单据编号」列值，或列名与模板不一致（后端已支持列名大小写不敏感）。`,
         )
       }
       if (countLines.length) {
@@ -182,23 +188,6 @@ async function syncPurchaseOrdersFromU9() {
   }
 }
 
-async function handleImport(uploadFile: { raw: File }) {
-  importing.value = true
-  importResult.value = null
-  try {
-    const r = await purchaseApi.importOrders(uploadFile.raw)
-    importResult.value = r.data
-    if (r.data.errors.length === 0) {
-      ElMessage.success(`导入完成：创建 ${r.data.ordersCreated} 个订单，${r.data.linesCreated} 行`)
-      importDialogVisible.value = false
-    }
-    await loadPos()
-  } catch {
-    ElMessage.error('导入失败')
-  } finally {
-    importing.value = false
-  }
-}
 </script>
 
 <template>
@@ -209,7 +198,6 @@ async function handleImport(uploadFile: { raw: File }) {
         <el-option v-for="o in orgs" :key="o.id" :label="`${o.code} ${o.name}`" :value="o.id" />
       </el-select>
       <el-button type="primary" @click="$router.push('/purchase/orders/new')">新建</el-button>
-      <el-button :icon="UploadIcon" @click="importDialogVisible = true; importResult = null">Excel 导入</el-button>
       <el-button
         v-if="showU9FineReportPoSync"
         type="success"
@@ -219,13 +207,36 @@ async function handleImport(uploadFile: { raw: File }) {
       >
         从 U9 同步采购订单（帆软）
       </el-button>
-      <el-button @click="exportSelected">导出选中（U9）</el-button>
     </div>
-    <el-table ref="tableRef" :data="rows" stripe @row-dblclick="(row: PoSummary) => goDetail(row.id)">
+    <div class="filter-row">
+      <el-input
+        v-model="filterPoNo"
+        clearable
+        placeholder="订单号"
+        style="width: 180px"
+        @keyup.enter="applyPoFilters"
+      />
+      <el-input
+        v-model="filterU9DocNo"
+        clearable
+        placeholder="U9单号"
+        style="width: 180px"
+        @keyup.enter="applyPoFilters"
+      />
+      <el-input
+        v-model="filterOfficialOrderNo"
+        clearable
+        placeholder="正式订单号"
+        style="width: 200px"
+        @keyup.enter="applyPoFilters"
+      />
+      <el-button type="primary" @click="applyPoFilters">查询</el-button>
+      <el-button @click="resetPoFilters">重置</el-button>
+    </div>
+    <el-table :data="rows" stripe @row-dblclick="(row: PoSummary) => goDetail(row.id)">
       <template #empty>
         <DataTableEmpty />
       </template>
-      <el-table-column type="selection" width="42" />
       <el-table-column prop="poNo" label="订单号" width="200" />
       <el-table-column prop="u9DocNo" label="U9单号" width="200" />
       <el-table-column label="状态" width="100">
@@ -252,39 +263,6 @@ async function handleImport(uploadFile: { raw: File }) {
         :total="total"
       />
     </div>
-    <el-dialog v-model="importDialogVisible" title="Excel 导入采购订单" width="620px">
-      <div class="import-hint">
-        <p>Excel 模板列顺序：<b>采购组织编码 | 供应商编码 | 币种 | 备注 | 物料编码 | 仓库编码 | 数量 | 单价 | 交期(yyyy-MM-dd)</b></p>
-        <p>第一行为表头（将跳过）。相同(组织+供应商+币种+备注)的连续行将合并为同一个订单。</p>
-      </div>
-      <el-upload
-        drag
-        :auto-upload="false"
-        accept=".xlsx,.xls"
-        :limit="1"
-        :on-change="handleImport"
-        :disabled="importing"
-        :show-file-list="false"
-      >
-        <div style="padding:20px 0">
-          <el-icon style="font-size:40px;color:var(--el-color-primary)"><UploadIcon /></el-icon>
-          <div style="margin-top:8px">{{ importing ? '导入中...' : '点击或拖拽上传 Excel 文件' }}</div>
-        </div>
-      </el-upload>
-      <div v-if="importResult" class="import-result">
-        <el-descriptions :column="3" border size="small">
-          <el-descriptions-item label="总行数">{{ importResult.totalRows }}</el-descriptions-item>
-          <el-descriptions-item label="创建订单">{{ importResult.ordersCreated }}</el-descriptions-item>
-          <el-descriptions-item label="创建行数">{{ importResult.linesCreated }}</el-descriptions-item>
-        </el-descriptions>
-        <div v-if="importResult.errors.length" class="import-errors">
-          <p style="font-weight:600;color:var(--el-color-danger);margin:12px 0 4px">错误明细：</p>
-          <ul>
-            <li v-for="(err, i) in importResult.errors" :key="i">{{ err }}</li>
-          </ul>
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
@@ -308,23 +286,12 @@ async function handleImport(uploadFile: { raw: File }) {
   font-size: 18px;
   font-weight: 600;
 }
-.import-hint {
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.import-result {
-  margin-top: 16px;
-}
-.import-errors ul {
-  max-height: 200px;
-  overflow-y: auto;
-  padding-left: 20px;
-  font-size: 13px;
-  color: var(--el-color-danger);
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 </style>
 

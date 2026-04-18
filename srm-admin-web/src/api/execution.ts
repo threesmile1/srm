@@ -36,15 +36,32 @@ export type GrLine = {
   uom: string
 }
 
+export type U9GoodsReceiptSyncResult = {
+  rowCount: number
+  droppedUnmappedRows: number
+  groupsTotal: number
+  created: number
+  updatedStatusOnly: number
+  skippedNonNingbo: number
+  skipped: number
+  errors: string[]
+}
+
 export type GrSummary = {
   id: number
   grNo: string
+  /** 本收货单 U9 单据编号（帆软同步） */
+  u9DocNo?: string | null
   purchaseOrderId: number
   poNo: string
+  /** 关联采购订单的 U9 单号（PM DocNo） */
+  poU9DocNo?: string | null
   warehouseId: number
   warehouseCode: string
   receiptDate: string
   exportStatus: string
+  /** PENDING_APPROVAL：待客服审核（宁波公司）；APPROVED；REJECTED */
+  status: string
   /** 关联采购订单尚未收清数量（列表接口返回；详情可选） */
   pendingReceiptQty?: string
   /** 是否存在至少一行关联发货通知 ASN（列表接口返回） */
@@ -59,7 +76,10 @@ export type GrSummary = {
 export type OpenPoAsnReceiptHint = {
   purchaseOrderId: number
   poNo: string
+  poU9DocNo?: string | null
   asnNo: string
+  /** 关联「最新已提交」发货通知 id，用于宁波客服确认跳转审批 */
+  asnNoticeId: number
   pendingReceiptQty: string
 }
 
@@ -144,6 +164,11 @@ export const executionApi = {
   listGoodsReceipts: (procurementOrgId: number) =>
     api.get<GrSummary[]>('/api/v1/goods-receipts', { params: { procurementOrgId } }),
 
+  listGoodsReceiptsPaged: (procurementOrgId: number, page: number, size: number, waitReceiveOnly = false) =>
+    api.get<SpringPage<GrSummary>>('/api/v1/goods-receipts/paged', {
+      params: { procurementOrgId, page, size, waitReceiveOnly },
+    }),
+
   /** 有已提交 ASN、本组织下尚未建过收货单的订单（用于待收货页签） */
   listPendingOpenPoWithAsn: (procurementOrgId: number) =>
     api.get<OpenPoAsnReceiptHint[]>('/api/v1/goods-receipts/pending-open-po-with-asn', {
@@ -151,6 +176,12 @@ export const executionApi = {
     }),
 
   getGoodsReceipt: (id: number) => api.get<GrDetail>(`/api/v1/goods-receipts/${id}`),
+
+  syncGoodsReceiptsFromU9: (procurementOrgId: number) =>
+    api.post<U9GoodsReceiptSyncResult>('/api/v1/goods-receipts/sync-from-u9', undefined, {
+      params: { procurementOrgId },
+      timeout: 600_000,
+    }),
 
   createGoodsReceipt: (body: {
     procurementOrgId: number

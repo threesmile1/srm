@@ -6,6 +6,8 @@ import com.srm.execution.domain.AsnStatus;
 import com.srm.execution.repo.AsnLineRepository;
 import com.srm.execution.repo.AsnNoticeRepository;
 import com.srm.execution.repo.GoodsReceiptLineRepository;
+import com.srm.approval.service.ApprovalService;
+import com.srm.foundation.util.NingboProcurementOrg;
 import com.srm.notification.service.NotificationService;
 import com.srm.master.domain.Supplier;
 import com.srm.master.service.MasterDataService;
@@ -52,6 +54,7 @@ public class AsnService {
     private final AsnNumberAllocator asnNumberAllocator;
     private final MasterDataService masterDataService;
     private final NotificationService notificationService;
+    private final ApprovalService approvalService;
 
     @Value("${srm.asn-upload-dir:${user.home}/.srm/asn-files}")
     private String asnUploadRoot;
@@ -160,6 +163,14 @@ public class AsnService {
         }
 
         AsnNotice saved = asnNoticeRepository.save(notice);
+        // 仅宁波公司：发起发货通知客服确认审批；其他采购组织不进入 ASN 审批流程
+        if (NingboProcurementOrg.isNingbo(saved.getProcurementOrg())) {
+            try {
+                approvalService.startApproval("ASN", saved.getId(), saved.getAsnNo(), BigDecimal.ZERO);
+            } catch (Exception e) {
+                log.warn("ASN 客服确认流程启动失败（不影响发货通知提交）asnId={}: {}", saved.getId(), e.getMessage());
+            }
+        }
         try {
             notificationService.send(
                     null,

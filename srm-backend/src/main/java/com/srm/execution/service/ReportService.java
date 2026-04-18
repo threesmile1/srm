@@ -248,7 +248,7 @@ public class ReportService {
                     from purchase_order_line pol
                     inner join purchase_order po on po.id = pol.purchase_order_id
                     left join goods_receipt_line grl on grl.purchase_order_line_id = pol.id
-                    left join goods_receipt gr on gr.id = grl.goods_receipt_id
+                    left join goods_receipt gr on gr.id = grl.goods_receipt_id and gr.status = 'APPROVED'
                     where po.procurement_org_id = :oid
                       and po.status in ('RELEASED', 'CLOSED')
                       and coalesce(pol.promised_date, pol.requested_date) is not null
