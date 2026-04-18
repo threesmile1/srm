@@ -11,6 +11,9 @@ const orgOptions = ref<OrgUnit[]>([])
 const supplierOptions = ref<Supplier[]>([])
 const dialog = ref(false)
 const editing = ref<UserItem | null>(null)
+const pwdDialog = ref(false)
+const pwdTarget = ref<UserItem | null>(null)
+const pwdForm = ref({ newPassword: '', confirmPassword: '' })
 const form = ref({
   username: '',
   password: '',
@@ -112,6 +115,37 @@ function roleLabel(code: string) {
   return roleOptions.find((r) => r.code === code)?.label ?? code
 }
 
+function openResetPassword(row: UserItem) {
+  pwdTarget.value = row
+  pwdForm.value = { newPassword: '', confirmPassword: '' }
+  pwdDialog.value = true
+}
+
+async function saveResetPassword() {
+  const t = pwdTarget.value
+  if (!t) return
+  const { newPassword, confirmPassword } = pwdForm.value
+  if (!newPassword) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  if (newPassword !== confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+  try {
+    await userApi.resetPassword(t.id, newPassword)
+    ElMessage.success('密码已重置')
+    pwdDialog.value = false
+  } catch (e: unknown) {
+    const msg =
+      e && typeof e === 'object' && 'response' in e
+        ? (e as { response?: { data?: { error?: string } } }).response?.data?.error
+        : ''
+    ElMessage.error(msg || '重置失败')
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -137,9 +171,10 @@ onMounted(load)
           <el-tag :type="row.enabled ? 'success' : 'danger'" size="small">{{ row.enabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="100">
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button link type="primary" @click="openResetPassword(row)">修改密码</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -179,6 +214,22 @@ onMounted(load)
         <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="pwdDialog" title="修改密码" width="440px" @closed="pwdTarget = null">
+      <p v-if="pwdTarget" class="pwd-hint">用户：<strong>{{ pwdTarget.username }}</strong></p>
+      <el-form label-width="100px">
+        <el-form-item label="新密码">
+          <el-input v-model="pwdForm.newPassword" type="password" show-password autocomplete="new-password" />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input v-model="pwdForm.confirmPassword" type="password" show-password autocomplete="new-password" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="pwdDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveResetPassword">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -186,4 +237,5 @@ onMounted(load)
 .page { padding: 16px; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .title { font-size: 18px; font-weight: 600; }
+.pwd-hint { margin: 0 0 12px; color: var(--el-text-color-secondary); font-size: 13px; }
 </style>

@@ -7,6 +7,21 @@ import DataTableEmpty from '../components/DataTableEmpty.vue'
 
 const router = useRouter()
 const rows = ref<PoSummary[]>([])
+
+/** 与后端 PoStatus 一致 */
+const poStatusMap: Record<string, string> = {
+  DRAFT: '草稿',
+  PENDING_APPROVAL: '待审批',
+  APPROVED: '已审核',
+  RELEASED: '已发布',
+  CLOSED: '已关闭',
+  CANCELLED: '已取消',
+}
+
+function poStatusLabel(s: string | undefined) {
+  if (!s) return '—'
+  return poStatusMap[s] ?? s
+}
 const exporting = ref(false)
 const total = ref(0)
 const currentPage = ref(1)
@@ -130,7 +145,9 @@ async function exportOrders() {
         <DataTableEmpty />
       </template>
       <el-table-column prop="poNo" label="订单号" width="200" />
-      <el-table-column prop="status" label="状态" width="100" />
+      <el-table-column label="状态" width="100">
+        <template #default="{ row }">{{ poStatusLabel(row.status) }}</template>
+      </el-table-column>
       <el-table-column prop="supplierName" label="供应商" />
       <el-table-column prop="officialOrderNo" label="正式订单号" min-width="260" show-overflow-tooltip />
       <el-table-column prop="businessDate" label="业务日期" width="110" show-overflow-tooltip />

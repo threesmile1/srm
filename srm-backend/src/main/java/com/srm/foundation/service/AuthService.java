@@ -53,20 +53,10 @@ public class AuthService {
         userAccountRepository.save(u);
     }
 
+    /** 仅校验非空；复杂度与长度上限由接口层 {@code @Size} 等约束。 */
     public static void validatePasswordStrength(String password) {
-        if (password == null || password.length() < 8) {
-            throw new BadRequestException("密码至少8位");
-        }
-        if (password.length() > 64) {
-            throw new BadRequestException("密码不能超过64位");
-        }
-        boolean hasLetter = false, hasDigit = false;
-        for (char c : password.toCharArray()) {
-            if (Character.isLetter(c)) hasLetter = true;
-            if (Character.isDigit(c)) hasDigit = true;
-        }
-        if (!hasLetter || !hasDigit) {
-            throw new BadRequestException("密码须同时包含字母和数字");
+        if (password == null || password.isBlank()) {
+            throw new BadRequestException("密码不能为空");
         }
     }
 }

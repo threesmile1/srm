@@ -7,6 +7,20 @@ import { portalApi, type PoDetail, type PoLine } from '../api/portal'
 const route = useRoute()
 const router = useRouter()
 const po = ref<PoDetail | null>(null)
+
+const poStatusMap: Record<string, string> = {
+  DRAFT: '草稿',
+  PENDING_APPROVAL: '待审批',
+  APPROVED: '已审核',
+  RELEASED: '已发布',
+  CLOSED: '已关闭',
+  CANCELLED: '已取消',
+}
+
+function poStatusLabel(s: string | undefined) {
+  if (!s) return '—'
+  return poStatusMap[s] ?? s
+}
 const dialog = ref(false)
 const batchDialog = ref(false)
 const currentLine = ref<PoLine | null>(null)
@@ -95,7 +109,7 @@ onMounted(load)
     </div>
     <el-descriptions :column="2" border style="margin-top: 16px">
       <el-descriptions-item label="订单号">{{ po.poNo }}</el-descriptions-item>
-      <el-descriptions-item label="状态">{{ po.status }}</el-descriptions-item>
+      <el-descriptions-item label="状态">{{ poStatusLabel(po.status) }}</el-descriptions-item>
       <el-descriptions-item label="采购组织">{{ po.procurementOrgCode }}</el-descriptions-item>
       <el-descriptions-item label="币种">{{ po.currency }}</el-descriptions-item>
       <el-descriptions-item v-if="po.exportStatus" label="U9导出">{{ po.exportStatus }}</el-descriptions-item>

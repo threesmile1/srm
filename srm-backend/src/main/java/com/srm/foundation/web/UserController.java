@@ -124,7 +124,7 @@ public class UserController {
 
     public record UserCreateRequest(
             @NotBlank @Size(max = 64) String username,
-            @NotBlank @Size(min = 6, max = 64) String password,
+            @NotBlank @Size(max = 128) String password,
             @Size(max = 128) String displayName,
             Long defaultProcurementOrgId,
             Long supplierId,
@@ -139,7 +139,7 @@ public class UserController {
             Set<String> roleCodes
     ) {}
 
-    public record ResetPasswordRequest(@NotBlank @Size(min = 6) String newPassword) {}
+    public record ResetPasswordRequest(@NotBlank @Size(max = 128) String newPassword) {}
 
     public record UserResponse(Long id, String username, String displayName, boolean enabled,
                                 Long defaultProcurementOrgId, Long supplierId, Set<String> roleCodes) {
