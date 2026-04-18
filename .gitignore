@@ -20,3 +20,9 @@ Thumbs.db
 
 .env
 .env.local
+
+# 本地工具包 / 临时截图（勿提交）
+/jre17.tar
+/maven.tar
+/mysql8.tar
+tmp_ocr_header*.png
