@@ -145,6 +145,9 @@ async function exportOrders() {
         <DataTableEmpty />
       </template>
       <el-table-column prop="poNo" label="订单号" width="200" />
+      <el-table-column label="U9采购订单号" width="200" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.u9DocNo?.trim() || '—' }}</template>
+      </el-table-column>
       <el-table-column label="状态" width="100">
         <template #default="{ row }">{{ poStatusLabel(row.status) }}</template>
       </el-table-column>

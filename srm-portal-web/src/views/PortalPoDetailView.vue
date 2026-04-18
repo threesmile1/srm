@@ -112,6 +112,7 @@ onMounted(load)
       <el-descriptions-item label="状态">{{ poStatusLabel(po.status) }}</el-descriptions-item>
       <el-descriptions-item label="采购组织">{{ po.procurementOrgCode }}</el-descriptions-item>
       <el-descriptions-item label="币种">{{ po.currency }}</el-descriptions-item>
+      <el-descriptions-item label="正式订单号" :span="2">{{ po.officialOrderNo?.trim() || '—' }}</el-descriptions-item>
       <el-descriptions-item v-if="po.exportStatus" label="U9导出">{{ po.exportStatus }}</el-descriptions-item>
     </el-descriptions>
 

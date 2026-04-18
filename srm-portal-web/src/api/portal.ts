@@ -3,6 +3,8 @@ import { api } from './http'
 export type PoSummary = {
   id: number
   poNo: string
+  /** U9 PM 采购订单单据编号（DocNo） */
+  u9DocNo: string | null
   officialOrderNo: string | null
   businessDate: string | null
   releasedAt: string | null
